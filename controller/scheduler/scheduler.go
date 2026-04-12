@@ -1174,6 +1174,10 @@ func (s *Scheduler) HandlePlacementRequest(req *PlacementRequest) {
 		formation := req.Job.Formation
 		counts := s.jobs.GetHostJobCounts(formation.key(), req.Job.Type)
 		var minCount int = math.MaxInt32
+		// fallbackHost tracks the best host among excluded hosts, used
+		// as a fallback if all eligible hosts are in the exclusion set
+		var fallbackHost *Host
+		var fallbackMinCount int = math.MaxInt32
 		for _, h := range s.ShuffledHosts() {
 			if h.Shutdown {
 				continue
@@ -1181,8 +1185,16 @@ func (s *Scheduler) HandlePlacementRequest(req *PlacementRequest) {
 			if !req.Job.TagsMatchHost(h) {
 				continue
 			}
-			count, ok := counts[h.ID]
-			if !ok || count == 0 {
+			count, _ := counts[h.ID]
+			// check if this host is in the exclusion set
+			if _, excluded := req.ExcludeHosts[h.ID]; excluded {
+				if count < fallbackMinCount {
+					fallbackMinCount = count
+					fallbackHost = h
+				}
+				continue
+			}
+			if count == 0 {
 				req.Host = h
 				break
 			}
@@ -1190,6 +1202,11 @@ func (s *Scheduler) HandlePlacementRequest(req *PlacementRequest) {
 				minCount = count
 				req.Host = h
 			}
+		}
+		// if all eligible hosts were excluded, fall back to the best
+		// excluded host rather than blocking the job
+		if req.Host == nil && fallbackHost != nil {
+			req.Host = fallbackHost
 		}
 
 		// if we still didn't pick a host, the job's tags don't match
@@ -1548,6 +1565,10 @@ func (s *Scheduler) StartJob(job *Job) {
 	log := s.logger.New("fn", "StartJob", "app.id", job.AppID, "release.id", job.ReleaseID, "job.id", job.ID, "job.type", job.Type)
 	log.Info("starting job")
 
+	// excludeHosts tracks hosts where AddJob has failed so the
+	// scheduler can prefer other hosts on subsequent placement attempts
+	excludeHosts := make(map[string]struct{})
+
 outer:
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
@@ -1562,7 +1583,7 @@ outer:
 		}
 
 		log.Info("placing job in the cluster")
-		req, err := s.PlaceJob(job)
+		req, err := s.PlaceJob(job, excludeHosts)
 		if err == ErrNotLeader {
 			log.Warn("not starting job as not leader")
 			return
@@ -1598,6 +1619,7 @@ outer:
 			return
 		}
 		log.Error("error adding job to the cluster", "attempts", attempt+1, "err", err)
+		excludeHosts[req.Host.ID] = struct{}{}
 	}
 }
 
@@ -1609,16 +1631,23 @@ type PlacementRequest struct {
 	Config *host.Job
 	Host   *Host
 	Err    chan error
+
+	// ExcludeHosts is a set of host IDs that should be avoided when
+	// placing the job, typically because a previous attempt to add the
+	// job to those hosts failed. If all eligible hosts are excluded,
+	// the scheduler falls back to selecting any eligible host.
+	ExcludeHosts map[string]struct{}
 }
 
 func (r *PlacementRequest) Error(err error) {
 	r.Err <- err
 }
 
-func (s *Scheduler) PlaceJob(job *Job) (*PlacementRequest, error) {
+func (s *Scheduler) PlaceJob(job *Job, excludeHosts map[string]struct{}) (*PlacementRequest, error) {
 	req := &PlacementRequest{
-		Job: job,
-		Err: make(chan error),
+		Job:          job,
+		Err:          make(chan error),
+		ExcludeHosts: excludeHosts,
 	}
 	s.placementRequests <- req
 	return req, <-req.Err
