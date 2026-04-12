@@ -1,0 +1,289 @@
+#!/bin/bash
+#
+# bootstrap-build builds all core Flynn components from source without
+# requiring a running Flynn cluster or access to the TUF repository.
+#
+# This script breaks the original chicken-and-egg problem where building
+# Flynn required a running Flynn cluster.
+#
+# Usage:
+#   script/bootstrap-build [--version VERSION]
+#
+# Environment:
+#   FLYNN_TUF_REPOSITORY  TUF repository URL [default: https://consolving.github.io/flynn-tuf-repo/repository]
+#
+# Requirements:
+#   - Go 1.13+ with CGO_ENABLED=1
+#   - libseccomp-dev, build-essential (for flynn-host CGO)
+#   - Linux x86_64 (flynn-host uses libcontainer)
+
+set -e
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/script/lib/ui.sh"
+
+usage() {
+  cat <<USAGE >&2
+usage: $0 [options]
+
+Build core Flynn components from source (no cluster required).
+
+OPTIONS:
+  -h, --help              Show this message
+  -x, --version=VERSION   Version string to embed [default: dev]
+  --output-dir=DIR        Directory for built binaries [default: build/bin]
+USAGE
+}
+
+main() {
+  local version="dev"
+  local output_dir="${ROOT}/build/bin"
+
+  while true; do
+    case "$1" in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      -x | --version)
+        if [[ -z "$2" ]]; then
+          fail "--version flag requires an argument"
+        fi
+        version="$2"
+        shift 2
+        ;;
+      --output-dir)
+        if [[ -z "$2" ]]; then
+          fail "--output-dir flag requires an argument"
+        fi
+        output_dir="$2"
+        shift 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  local tuf_repo="${FLYNN_TUF_REPOSITORY:-"https://consolving.github.io/flynn-tuf-repo/repository"}"
+
+  # Extract TUF root keys from builder/manifest.json (compact JSON, no spaces)
+  local tuf_root_keys
+  tuf_root_keys="$(python3 -c "import json; m=json.load(open('${ROOT}/builder/manifest.json')); print(json.dumps(m['tuf']['root_keys'],separators=(',',':')))")"
+  if [[ -z "${tuf_root_keys}" ]]; then
+    fail "unable to extract TUF root keys from builder/manifest.json"
+  fi
+
+  local go_ldflags="-X github.com/flynn/flynn/pkg/version.version=${version}"
+  go_ldflags="${go_ldflags} -X github.com/flynn/flynn/pkg/tufconfig.Repository=${tuf_repo}"
+  go_ldflags="${go_ldflags} -X 'github.com/flynn/flynn/pkg/tufconfig.RootKeysJSON=${tuf_root_keys}'"
+
+  mkdir -p "${output_dir}"
+
+  info "building flynn-host (CGO enabled)"
+  CGO_ENABLED=1 GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-host" ./host
+  chmod +x "${output_dir}/flynn-host"
+
+  info "building flynn-init"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-init" ./host/flynn-init
+  chmod +x "${output_dir}/flynn-init"
+
+  info "building flynn-controller"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-controller" ./controller
+  chmod +x "${output_dir}/flynn-controller"
+
+  info "building flynn-scheduler"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-scheduler" ./controller/scheduler
+  chmod +x "${output_dir}/flynn-scheduler"
+
+  info "building flynn-worker"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-worker" ./controller/worker
+  chmod +x "${output_dir}/flynn-worker"
+
+  info "building flynn CLI (linux-amd64)"
+  GOOS=linux GOARCH=amd64 GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-linux-amd64" ./cli
+  chmod +x "${output_dir}/flynn-linux-amd64"
+  ln -nfs "flynn-linux-amd64" "${output_dir}/flynn"
+
+  info "building discoverd"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/discoverd" ./discoverd
+  chmod +x "${output_dir}/discoverd"
+
+  info "building flynn-router"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-router" ./router
+  chmod +x "${output_dir}/flynn-router"
+
+  info "building flynn-blobstore"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-blobstore" ./blobstore
+  chmod +x "${output_dir}/flynn-blobstore"
+
+  info "building logaggregator"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/logaggregator" ./logaggregator
+  chmod +x "${output_dir}/logaggregator"
+
+  # --- Additional component binaries for image building ---
+
+  info "building flanneld"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flanneld" ./flannel
+  chmod +x "${output_dir}/flanneld"
+
+  info "building flannel-wrapper"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flannel-wrapper" ./flannel/wrapper
+  chmod +x "${output_dir}/flannel-wrapper"
+
+  info "building flynn-postgres"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-postgres" ./appliance/postgresql/cmd/flynn-postgres
+  chmod +x "${output_dir}/flynn-postgres"
+
+  info "building flynn-postgres-api"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-postgres-api" ./appliance/postgresql/cmd/flynn-postgres-api
+  chmod +x "${output_dir}/flynn-postgres-api"
+
+  info "building flynn-redis"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-redis" ./appliance/redis/cmd/flynn-redis
+  chmod +x "${output_dir}/flynn-redis"
+
+  info "building flynn-redis-api"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-redis-api" ./appliance/redis/cmd/flynn-redis-api
+  chmod +x "${output_dir}/flynn-redis-api"
+
+  info "building flynn-mariadb"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-mariadb" ./appliance/mariadb/cmd/flynn-mariadb
+  chmod +x "${output_dir}/flynn-mariadb"
+
+  info "building flynn-mariadb-api"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-mariadb-api" ./appliance/mariadb/cmd/flynn-mariadb-api
+  chmod +x "${output_dir}/flynn-mariadb-api"
+
+  info "building flynn-mongodb"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-mongodb" ./appliance/mongodb/cmd/flynn-mongodb
+  chmod +x "${output_dir}/flynn-mongodb"
+
+  info "building flynn-mongodb-api"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-mongodb-api" ./appliance/mongodb/cmd/flynn-mongodb-api
+  chmod +x "${output_dir}/flynn-mongodb-api"
+
+  info "building gitreceived"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/gitreceived" ./gitreceive
+  chmod +x "${output_dir}/gitreceived"
+
+  info "building flynn-receiver"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-receiver" ./gitreceive/receiver
+  chmod +x "${output_dir}/flynn-receiver"
+
+  info "building tarreceive"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/tarreceive" ./tarreceive
+  chmod +x "${output_dir}/tarreceive"
+
+  info "building taffy"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/taffy" ./taffy
+  chmod +x "${output_dir}/taffy"
+
+  info "building create-artifact (slugbuilder)"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/create-artifact" ./slugbuilder/artifact
+  chmod +x "${output_dir}/create-artifact"
+
+  info "building slug-migrator (slugbuilder)"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/slug-migrator" ./slugbuilder/migrator
+  chmod +x "${output_dir}/slug-migrator"
+
+  info "building flynn-status"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-status" ./status
+  chmod +x "${output_dir}/flynn-status"
+
+  info "building updater"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/updater" ./updater
+  chmod +x "${output_dir}/updater"
+
+  info "building flynn-builder"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-builder" ./builder
+  chmod +x "${output_dir}/flynn-builder"
+
+  info "building flynn-controller-examples"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-controller-examples" ./controller/examples
+  chmod +x "${output_dir}/flynn-controller-examples"
+
+  info "building flynn-release"
+  GO111MODULE=on go build -mod=vendor \
+    -ldflags "${go_ldflags}" \
+    -o "${output_dir}/flynn-release" ./util/release
+  chmod +x "${output_dir}/flynn-release"
+
+  # --- Build the export-tuf tool ---
+  info "building export-tuf tool"
+  GO111MODULE=on go build -mod=vendor \
+    -o "${output_dir}/export-tuf" ./script/export-tuf
+  chmod +x "${output_dir}/export-tuf"
+
+  # Create gzipped flynn-host for bootstrap compatibility
+  info "creating gzipped flynn-host archive"
+  gzip -c "${output_dir}/flynn-host" > "${output_dir}/flynn-host.gz"
+
+  info ""
+  info "bootstrap build complete!"
+  info "Total binaries built: $(ls -1 "${output_dir}/" | grep -v '.gz$' | grep -v '^flynn$' | wc -l)"
+  info "binaries are in ${output_dir}/"
+  ls -la "${output_dir}/"
+}
+
+main "$@"
