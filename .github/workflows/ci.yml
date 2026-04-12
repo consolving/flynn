@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build all components
-        run: script/bootstrap-build --version "ci-${GITHUB_SHA::8}"
+        run: script/bootstrap-build --version "ci-$(echo "$GITHUB_SHA" | cut -c1-8)"
 
       - name: Verify binaries
         run: |
