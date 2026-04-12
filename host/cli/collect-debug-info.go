@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -111,7 +111,7 @@ func runCollectDebugInfo(args *docopt.Args) error {
 	if args.Bool["--tarball"] || gist.Size > GistMaxSize {
 		path := args.String["--filename"]
 		if path == "" {
-			tmpDir, err := ioutil.TempDir("", "flynn-host-debug")
+			tmpDir, err := os.MkdirTemp("", "flynn-host-debug")
 			if err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func captureSchedulerState(gist *Gist) error {
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected HTTP status: %s", res.Status)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
 	}

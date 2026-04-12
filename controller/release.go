@@ -8,7 +8,7 @@ import (
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/postgres"
-	"golang.org/x/net/context"
+	"context"
 )
 
 type releaseID struct {

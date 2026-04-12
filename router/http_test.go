@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -203,7 +202,7 @@ func (s *S) TestAddHTTPRouteWithCert(c *C) {
 	c.Assert(err, IsNil)
 	defer res.Body.Close()
 	c.Assert(res.StatusCode, Equals, 200)
-	data, err := ioutil.ReadAll(res.Body)
+	data, err := io.ReadAll(res.Body)
 	c.Assert(err, IsNil)
 	c.Assert(string(data), Equals, "1")
 
@@ -297,7 +296,7 @@ func assertGetCookies(c *C, url, host, expected string, cookies []*http.Cookie) 
 	c.Assert(err, IsNil)
 	defer res.Body.Close()
 	c.Assert(res.StatusCode, Equals, 200)
-	data, err := ioutil.ReadAll(res.Body)
+	data, err := io.ReadAll(res.Body)
 	c.Assert(err, IsNil)
 	c.Assert(string(data), Equals, expected)
 	return res.Cookies()
@@ -916,7 +915,7 @@ func (s *S) TestHTTPWebsocket(c *C) {
 			c.Assert(err, IsNil)
 			res, err := http.ReadResponse(bufio.NewReader(conn), req)
 			c.Assert(err, IsNil)
-			data, err := ioutil.ReadAll(res.Body)
+			data, err := io.ReadAll(res.Body)
 			c.Assert(err, IsNil)
 			res.Body.Close()
 			c.Assert(res.StatusCode, Equals, 200)
@@ -966,7 +965,7 @@ func (s *S) TestUpgradeHeaderIsCaseInsensitive(c *C) {
 
 		c.Assert(err, IsNil)
 		c.Assert(res.StatusCode, Equals, 200)
-		data, err := ioutil.ReadAll(res.Body)
+		data, err := io.ReadAll(res.Body)
 		c.Assert(err, IsNil)
 		c.Assert(string(data), Equals, "ok\n")
 	}
@@ -1103,7 +1102,7 @@ func (s *S) TestNoBackends(c *C) {
 	defer res.Body.Close()
 
 	c.Assert(res.StatusCode, Equals, 503)
-	data, err := ioutil.ReadAll(res.Body)
+	data, err := io.ReadAll(res.Body)
 	c.Assert(err, IsNil)
 	c.Assert(string(data), Equals, "Service Unavailable\n")
 }
@@ -1143,7 +1142,7 @@ func (s *S) TestNoResponsiveBackends(c *C) {
 		defer res.Body.Close()
 
 		c.Assert(res.StatusCode, Equals, 503)
-		data, err := ioutil.ReadAll(res.Body)
+		data, err := io.ReadAll(res.Body)
 		c.Assert(err, IsNil)
 		c.Assert(string(data), Equals, "Service Unavailable\n")
 	}
@@ -1205,7 +1204,7 @@ func (s *S) TestClosedBackendRetriesAnotherBackend(c *C) {
 		defer res.Body.Close()
 
 		c.Assert(res.StatusCode, Equals, 200)
-		data, err := ioutil.ReadAll(res.Body)
+		data, err := io.ReadAll(res.Body)
 		c.Assert(err, IsNil)
 		c.Assert(string(data), Equals, "2")
 		// ensure that unsuccessful upgrades are closed, and non-upgrades aren't.
@@ -1283,7 +1282,7 @@ func (s *S) runTestErrorAfterConnOnlyHitsOneBackend(c *C, upgrade bool) {
 	defer res.Body.Close()
 
 	c.Assert(res.StatusCode, Equals, 503)
-	data, err := ioutil.ReadAll(res.Body)
+	data, err := io.ReadAll(res.Body)
 	c.Assert(err, IsNil)
 	c.Assert(string(data), Equals, "Service Unavailable\n")
 }
@@ -1513,7 +1512,7 @@ func (s *S) TestHTTPHijackUpgrade(c *C) {
 
 	rwc.Write([]byte("ping!\n"))
 
-	pong, err := ioutil.ReadAll(rwc)
+	pong, err := io.ReadAll(rwc)
 	c.Assert(err, IsNil)
 	c.Assert(string(pong), Equals, "pong!\n")
 }
@@ -1611,7 +1610,7 @@ func (s *S) TestHTTPProxyProtocol(c *C) {
 		c.Assert(req.Write(conn), IsNil)
 		res, err := http.ReadResponse(bufio.NewReader(conn), req)
 		c.Assert(err, IsNil)
-		data, _ := ioutil.ReadAll(res.Body)
+		data, _ := io.ReadAll(res.Body)
 		c.Assert(string(data), Equals, "1.1.1.123")
 	}
 }
@@ -1768,7 +1767,7 @@ func (s *S) TestHTTPLoadBalance(c *C) {
 
 	// get a sticky cookie for one of the backends, taking note of its ID
 	res := get("/ping")
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	c.Assert(err, IsNil)
 	backendID := string(body)
@@ -1788,7 +1787,7 @@ func (s *S) TestHTTPLoadBalance(c *C) {
 		res := get("/block", stickyCookie)
 		go func() {
 			defer res.Body.Close()
-			ioutil.ReadAll(res.Body)
+			io.ReadAll(res.Body)
 		}()
 	}
 
@@ -1796,7 +1795,7 @@ func (s *S) TestHTTPLoadBalance(c *C) {
 	// non-loaded backends
 	for i := 0; i < 10; i++ {
 		res := get("/ping")
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		res.Body.Close()
 		c.Assert(err, IsNil)
 		c.Assert(string(body), Not(Equals), backendID)

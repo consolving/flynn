@@ -3,7 +3,6 @@ package main_test
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -70,7 +69,7 @@ type Main struct {
 // NewMain returns a new instance of Main.
 func NewMain() *Main {
 	// Create a temporary data directory.
-	dataDir, err := ioutil.TempDir("", "flynn-redis-")
+	dataDir, err := os.MkdirTemp("", "flynn-redis-")
 	if err != nil {
 		panic(err)
 	}

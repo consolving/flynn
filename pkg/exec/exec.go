@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 
 	ct "github.com/flynn/flynn/controller/types"
@@ -365,7 +364,7 @@ func (c *Cmd) Output() ([]byte, error) {
 	}
 	var b bytes.Buffer
 	c.Stdout = &b
-	c.Stderr = ioutil.Discard
+	c.Stderr = io.Discard
 	err := c.Run()
 	return b.Bytes(), err
 }

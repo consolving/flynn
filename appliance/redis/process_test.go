@@ -2,7 +2,7 @@ package redis_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"net"
 	"os"
 	"os/exec"
@@ -110,7 +110,7 @@ type Process struct {
 // NewProcess creates a new Process on a random port.
 func NewProcess() *Process {
 	// Create temporary directory for data.
-	path, err := ioutil.TempDir("", "flynn-redis-")
+	path, err := os.MkdirTemp("", "flynn-redis-")
 	if err != nil {
 		panic(err)
 	}

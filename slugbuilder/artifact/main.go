@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -54,7 +53,7 @@ func run(dir string, uid, gid int) error {
 	}
 
 	// create a squashfs layer
-	layer, err := ioutil.TempFile("", "squashfs-")
+	layer, err := os.CreateTemp("", "squashfs-")
 	if err != nil {
 		return err
 	}
@@ -147,7 +146,7 @@ func uploadSlug(slugFile *os.File, url string) (err error) {
 		}
 		// use a NopCloser to ensure failed requests don't close
 		// the slug file
-		data := ioutil.NopCloser(slugFile)
+		data := io.NopCloser(slugFile)
 		return upload(data, url)
 	}
 	for attempt := 1; attempt <= maxSlugUploadAttempts; attempt++ {
@@ -185,7 +184,7 @@ func determineProcessTypes(dir string) []string {
 }
 
 func loadProcfileTypes(dir string) []string {
-	data, err := ioutil.ReadFile(filepath.Join(dir, "app", "Procfile"))
+	data, err := os.ReadFile(filepath.Join(dir, "app", "Procfile"))
 	if err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Fprintln(os.Stderr, "WARN: error reading Procfile:", err)
@@ -205,7 +204,7 @@ func loadProcfileTypes(dir string) []string {
 }
 
 func loadDefaultTypes(dir string) []string {
-	data, err := ioutil.ReadFile(filepath.Join(dir, "app", ".release"))
+	data, err := os.ReadFile(filepath.Join(dir, "app", ".release"))
 	if err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Fprintln(os.Stderr, "WARN: error reading .release:", err)

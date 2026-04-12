@@ -18,7 +18,7 @@ import (
 	. "github.com/flynn/go-check"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/jackc/pgx"
-	"golang.org/x/net/context"
+	"context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

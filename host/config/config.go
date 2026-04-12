@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -38,5 +37,5 @@ func (c *Config) WriteTo(name string) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(name, append(data, '\n'), 0644)
+	return os.WriteFile(name, append(data, '\n'), 0644)
 }

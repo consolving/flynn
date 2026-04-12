@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 
@@ -21,7 +21,7 @@ func (s *S) provisionTestResourceWithServer(c *C, name string, apps []string) (*
 			return
 		}
 		c.Assert(req.URL.Path, Equals, "/things")
-		in, err := ioutil.ReadAll(req.Body)
+		in, err := io.ReadAll(req.Body)
 		c.Assert(err, IsNil)
 		c.Assert(string(in), Equals, string(data))
 		w.Write([]byte(fmt.Sprintf(`{"id":"/things/%s","env":{"foo":"baz"}}`, name)))

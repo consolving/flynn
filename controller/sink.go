@@ -11,7 +11,7 @@ import (
 	"github.com/flynn/flynn/pkg/ctxhelper"
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/sse"
-	"golang.org/x/net/context"
+	"context"
 )
 
 // Create a new sink

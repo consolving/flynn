@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -325,7 +325,7 @@ func testOffset(r *data.FileRepo, t *testing.T, checkEtags bool) {
 			t.Fatal(err)
 		}
 		defer res.Body.Close()
-		data, err := ioutil.ReadAll(res.Body)
+		data, err := io.ReadAll(res.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -403,7 +403,7 @@ func testFilesystem(r *data.FileRepo, testMeta bool, t *testing.T) {
 				t.Error(err)
 				return
 			}
-			resData, err := ioutil.ReadAll(res.Body)
+			resData, err := io.ReadAll(res.Body)
 			res.Body.Close()
 			if err != nil {
 				t.Error(err)
@@ -475,7 +475,7 @@ func testFilesystem(r *data.FileRepo, testMeta bool, t *testing.T) {
 				t.Error(err)
 				return
 			}
-			resData, err = ioutil.ReadAll(res.Body)
+			resData, err = io.ReadAll(res.Body)
 			res.Body.Close()
 			if err != nil {
 				t.Error(err)
@@ -515,7 +515,7 @@ func testFilesystem(r *data.FileRepo, testMeta bool, t *testing.T) {
 						t.Error(err)
 						return
 					}
-					resData, err := ioutil.ReadAll(res.Body)
+					resData, err := io.ReadAll(res.Body)
 					res.Body.Close()
 					if err != nil {
 						t.Error(err)

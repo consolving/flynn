@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 	"sync"
@@ -313,7 +312,7 @@ func (s *S) TestGetAppLogSSEFollow(c *C) {
 
 	resc := make(chan []byte)
 	go func() {
-		res, _ := ioutil.ReadAll(res.Body)
+		res, _ := io.ReadAll(res.Body)
 		select {
 		case resc <- res:
 		case <-done:

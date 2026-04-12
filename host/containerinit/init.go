@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -735,7 +734,7 @@ func containerInitApp(c *Config, logFile *os.File) error {
 }
 
 func writeEtcHosts(hostname string) error {
-	return ioutil.WriteFile(
+	return os.WriteFile(
 		"/etc/hosts",
 		[]byte(fmt.Sprintf("127.0.0.1 localhost %s\n", hostname)),
 		0644,
@@ -769,7 +768,7 @@ func Main() {
 	go debugStackPrinter(logW)
 
 	config := &Config{}
-	data, err := ioutil.ReadFile("/.containerconfig")
+	data, err := os.ReadFile("/.containerconfig")
 	if err != nil {
 		os.Exit(70)
 	}

@@ -18,7 +18,7 @@ import (
 	"github.com/flynn/flynn/pkg/syslog/rfc5424"
 
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 	"github.com/inconshreveable/log15"
 )
 

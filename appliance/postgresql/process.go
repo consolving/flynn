@@ -3,7 +3,6 @@ package postgresql
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -348,7 +347,7 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 	if p.running() && p.config().Role == state.RoleSync {
 		log.Info("promoting to primary")
 
-		if err := ioutil.WriteFile(p.triggerPath(), nil, 0655); err != nil {
+		if err := os.WriteFile(p.triggerPath(), nil, 0655); err != nil {
 			log.Error("error creating trigger file", "path", p.triggerPath(), "err", err)
 			return err
 		}
@@ -469,7 +468,7 @@ func (p *Process) assumeStandby(upstream, downstream *discoverd.Instance) error 
 		))
 		if err != nil {
 			log.Error("error pulling basebackup", "err", err)
-			if files, err := ioutil.ReadDir("/data"); err == nil {
+			if files, err := os.ReadDir("/data"); err == nil {
 				for _, file := range files {
 					os.RemoveAll(filepath.Join("/data", file.Name()))
 				}
@@ -861,7 +860,7 @@ func (p *Process) writeRecoveryConf(upstream *discoverd.Instance) error {
 }
 
 func (p *Process) writeHBAConf() error {
-	return ioutil.WriteFile(p.hbaConfPath(), hbaConf, 0644)
+	return os.WriteFile(p.hbaConfPath(), hbaConf, 0644)
 }
 
 func (p *Process) configPath() string {

@@ -33,7 +33,7 @@ import (
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/inconshreveable/log15"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 	"google.golang.org/grpc"
 )
 

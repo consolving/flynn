@@ -15,8 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"context"
+
 	"github.com/inconshreveable/log15"
-	"golang.org/x/net/context"
 )
 
 const (

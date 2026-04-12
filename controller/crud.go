@@ -8,7 +8,7 @@ import (
 	"github.com/flynn/flynn/pkg/ctxhelper"
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 )
 
 type Repository interface {

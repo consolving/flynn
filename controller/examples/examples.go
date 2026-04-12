@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -215,7 +214,7 @@ func (e *generator) getAppLog() {
 	})
 	if err == nil {
 		defer res.Close()
-		io.Copy(ioutil.Discard, res)
+		io.Copy(io.Discard, res)
 	}
 }
 

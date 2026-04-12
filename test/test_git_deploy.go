@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -157,7 +156,7 @@ func (s *GitDeploySuite) runBuildpackTestWithResponsePattern(t *c.C, name string
 			return err
 		}
 		defer res.Body.Close()
-		contents, err := ioutil.ReadAll(res.Body)
+		contents, err := io.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
@@ -233,10 +232,10 @@ func (s *GitDeploySuite) TestGitSubmodules(t *c.C) {
 
 	// use a private SSH URL to test ssh client key
 	gmPath := filepath.Join(r.dir, ".gitmodules")
-	gm, err := ioutil.ReadFile(gmPath)
+	gm, err := os.ReadFile(gmPath)
 	t.Assert(err, c.IsNil)
 	gm = bytes.Replace(gm, []byte("https://github.com/"), []byte("git@github.com:"), 1)
-	err = ioutil.WriteFile(gmPath, gm, os.ModePerm)
+	err = os.WriteFile(gmPath, gm, os.ModePerm)
 	t.Assert(err, c.IsNil)
 
 	t.Assert(r.git("commit", "-am", "Add Submodule"), Succeeds)
@@ -298,7 +297,7 @@ func (s *GitDeploySuite) TestCancel(t *c.C) {
 	// send Ctrl-C to git process group
 	syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
 	t.Assert(err, c.IsNil)
-	go io.Copy(ioutil.Discard, stdout)
+	go io.Copy(io.Discard, stdout)
 	cmd.Wait()
 	close(done)
 

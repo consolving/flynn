@@ -56,7 +56,7 @@ TEST_PACKAGES_STANDALONE = \
 #   ./pkg/term/...       — requires /dev/tty (not available in CI containers)
 
 test-unit-standalone:
-	GO111MODULE=on go test -mod=vendor -race -cover $(TEST_PACKAGES_STANDALONE)
+	go test -mod=vendor -race -cover $(TEST_PACKAGES_STANDALONE)
 
 test-integration: build
 	script/run-integration-tests

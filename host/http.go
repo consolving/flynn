@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -567,7 +566,7 @@ func newTufClient(tufDB, repository string) (*tuf.Client, error) {
 
 func extractTufDB(r *http.Request) (string, error) {
 	defer r.Body.Close()
-	tmp, err := ioutil.TempFile("", "tuf-db")
+	tmp, err := os.CreateTemp("", "tuf-db")
 	if err != nil {
 		return "", err
 	}

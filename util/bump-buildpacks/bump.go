@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,7 +17,7 @@ const dataFile = "slugbuilder/builder/buildpacks.txt"
 func main() {
 	log.SetFlags(log.Lshortfile)
 
-	raw, err := ioutil.ReadFile(dataFile)
+	raw, err := os.ReadFile(dataFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,7 +48,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if err := ioutil.WriteFile(dataFile, out.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(dataFile, out.Bytes(), 0644); err != nil {
 		log.Fatal(err)
 	}
 

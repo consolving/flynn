@@ -9,7 +9,6 @@ if [ ! -f build/bin/flynn-builder ]; then
   go build -o build/bin/flynn-builder ./builder
 fi
 
-export GO111MODULE=on
 export GOFLAGS=-mod=vendor
 
 build/bin/flynn-builder "$@"

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -533,7 +532,7 @@ func (s *CLISuite) TestRoute(t *c.C) {
 	assertRouteContains(routeID, false)
 
 	writeTemp := func(data, prefix string) (string, error) {
-		f, err := ioutil.TempFile(os.TempDir(), fmt.Sprintf("flynn-test-%s", prefix))
+		f, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("flynn-test-%s", prefix))
 		t.Assert(err, c.IsNil)
 		_, err = f.WriteString(data)
 		t.Assert(err, c.IsNil)
@@ -762,7 +761,7 @@ func (s *CLISuite) TestLogFollow(t *c.C) {
 
 func (s *CLISuite) TestCluster(t *c.C) {
 	// use a custom flynnrc to avoid disrupting other tests
-	file, err := ioutil.TempFile("", "")
+	file, err := os.CreateTemp("", "")
 	t.Assert(err, c.IsNil)
 	flynn := func(cmdArgs ...string) *CmdResult {
 		cmd := exec.Command(args.CLI, cmdArgs...)
@@ -857,7 +856,7 @@ func (s *CLISuite) TestRelease(t *c.C) {
 			}
 		}
 	}`)
-	t.Assert(ioutil.WriteFile(updateFile, updateJSON, 0644), c.IsNil)
+	t.Assert(os.WriteFile(updateFile, updateJSON, 0644), c.IsNil)
 	t.Assert(app.flynn("release", "update", updateFile), Succeeds)
 
 	resultJSON := []byte(`{
@@ -1192,12 +1191,12 @@ func (s *CLISuite) TestSlugReleaseGarbageCollection(t *c.C) {
 	imageArtifact := s.createArtifact(t, "test-apps")
 
 	// create 5 slug artifacts
-	tmp, err := ioutil.TempFile("", "squashfs-")
+	tmp, err := os.CreateTemp("", "squashfs-")
 	t.Assert(err, c.IsNil)
 	defer os.Remove(tmp.Name())
 	defer tmp.Close()
 	t.Assert(exec.Command("mksquashfs", t.MkDir(), tmp.Name(), "-noappend").Run(), c.IsNil)
-	slug, err := ioutil.ReadAll(tmp)
+	slug, err := io.ReadAll(tmp)
 	t.Assert(err, c.IsNil)
 	slugHash := sha512.Sum512(slug)
 	slugs := []string{
@@ -1398,7 +1397,7 @@ func (s *CLISuite) TestDockerPush(t *c.C) {
 	res, err := hh.RetryClient.Get("http://" + instances[0].Addr)
 	t.Assert(err, c.IsNil)
 	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	t.Assert(err, c.IsNil)
 	t.Assert(string(body), c.Equals, "OK")
 }

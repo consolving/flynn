@@ -1,7 +1,6 @@
 package zfs
 
 import (
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +8,7 @@ import (
 
 func zpoolImportFile(fileVdevPath string) error {
 	// make tmpdir with symlink to make it possible to actually look at a single file with 'zpool import'
-	tempDir, err := ioutil.TempDir("/tmp/", "zfs-import-")
+	tempDir, err := os.MkdirTemp("/tmp/", "zfs-import-")
 	if err != nil {
 		return err
 	}

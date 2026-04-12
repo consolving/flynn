@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -147,7 +146,7 @@ func randDuration(n time.Duration) time.Duration {
 }
 
 func readTime(path string) time.Time {
-	p, err := ioutil.ReadFile(path)
+	p, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return time.Time{}
 	}
@@ -162,7 +161,7 @@ func readTime(path string) time.Time {
 }
 
 func writeTime(path string, t time.Time) bool {
-	return ioutil.WriteFile(path, []byte(t.Format(time.RFC3339)), 0644) == nil
+	return os.WriteFile(path, []byte(t.Format(time.RFC3339)), 0644) == nil
 }
 
 type tufBuffer struct {

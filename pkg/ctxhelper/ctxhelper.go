@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 	log "github.com/inconshreveable/log15"
 )
 

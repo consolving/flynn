@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"context"
+
 	"github.com/flynn/flynn/discoverd/cache"
 	"github.com/flynn/flynn/pkg/connutil"
 	"github.com/flynn/flynn/router/proxy"
 	router "github.com/flynn/flynn/router/types"
-	"golang.org/x/net/context"
 )
 
 type TCPListener struct {

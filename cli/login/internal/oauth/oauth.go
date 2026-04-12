@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -58,7 +57,7 @@ func RefreshToken(c *oauth2.Config, t *oauth2.Token, audience string) (*oauth2.T
 	if err != nil {
 		return nil, err
 	}
-	body, err := ioutil.ReadAll(io.LimitReader(res.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	res.Body.Close()
 	if err != nil {
 		return nil, &url.Error{

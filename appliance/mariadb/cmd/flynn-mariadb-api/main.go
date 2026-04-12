@@ -18,7 +18,7 @@ import (
 	"github.com/flynn/flynn/pkg/sirenia/scale"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 	"github.com/inconshreveable/log15"
 )
 

@@ -3,7 +3,7 @@ package mongodb
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -36,7 +36,7 @@ func (MongoDBSuite) TestSingletonPrimary(c *C) {
 	p.Port = "8500"
 	p.OpTimeout = 30 * time.Second
 	keyFile := filepath.Join(p.DataDir, "Keyfile")
-	err := ioutil.WriteFile(keyFile, []byte("password"), 0600)
+	err := os.WriteFile(keyFile, []byte("password"), 0600)
 	c.Assert(err, IsNil)
 	topology := &state.State{Singleton: true, Primary: instance(p)}
 	err = p.Reconfigure(&state.Config{Role: state.RolePrimary, State: topology})
@@ -62,7 +62,7 @@ func (MongoDBSuite) TestSingletonPrimary(c *C) {
 	p.Port = "8500"
 	p.OpTimeout = 30 * time.Second
 	keyFile = filepath.Join(p.DataDir, "Keyfile")
-	err = ioutil.WriteFile(keyFile, []byte("password"), 0600)
+	err = os.WriteFile(keyFile, []byte("password"), 0600)
 	c.Assert(err, IsNil)
 	err = p.Reconfigure(&state.Config{Role: state.RolePrimary, State: topology})
 	c.Assert(err, IsNil)
@@ -487,7 +487,7 @@ func NewTestProcess(c *C, n uint32) *Process {
 	p.OpTimeout = 30 * time.Second
 	p.Logger = p.Logger.New("id", p.ID, "port", p.Port)
 	keyFile := filepath.Join(p.DataDir, "Keyfile")
-	err := ioutil.WriteFile(keyFile, []byte("password"), 0600)
+	err := os.WriteFile(keyFile, []byte("password"), 0600)
 	c.Assert(err, IsNil)
 	return p
 }

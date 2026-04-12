@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -371,7 +370,7 @@ func dockerPush(client controller.Client, repo, tag string) (*ct.Artifact, error
 }
 
 func dockerSave(tag string, tw *backup.TarWriter, progress backup.ProgressBar) error {
-	tmp, err := ioutil.TempFile("", "flynn-docker-save")
+	tmp, err := os.CreateTemp("", "flynn-docker-save")
 	if err != nil {
 		return fmt.Errorf("error creating temp file: %s", err)
 	}
@@ -452,7 +451,7 @@ func runDockerPushTar(args *docopt.Args, client controller.Client) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	tmpDir, err := ioutil.TempDir("", "flynn-docker-push")
+	tmpDir, err := os.MkdirTemp("", "flynn-docker-push")
 	if err != nil {
 		return fmt.Errorf("error creating temporary directory: %s", err)
 	}

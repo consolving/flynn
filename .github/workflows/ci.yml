@@ -1,22 +1,20 @@
 # CI workflow for Flynn
 #
 # Builds all components and runs unit tests on every push and pull request
-# to the tuf-rebuild branch. Uses a Debian container with Go 1.13.15 and
+# to the tuf-rebuild branch. Uses a Debian container with Go 1.22.12 and
 # all required system dependencies.
 #
 # The build uses script/bootstrap-build which compiles all 34 Flynn binaries
 # from source without requiring a running Flynn cluster.
-#
-# Note: Debian Buster (10) is EOL and its repos are offline. We use
-# Bookworm (12) for system packages; Go 1.13 is installed separately.
 
 name: CI
 
 on:
   push:
-    branches: [tuf-rebuild, master]
+    branches: [tuf-rebuild, master, go-1.22-upgrade]
   pull_request:
     branches: [tuf-rebuild, master]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -37,9 +35,9 @@ jobs:
             curl \
             ca-certificates
 
-      - name: Install Go 1.13.15
+      - name: Install Go 1.22.12
         run: |
-          curl -fsSL "https://go.dev/dl/go1.13.15.linux-amd64.tar.gz" \
+          curl -fsSL "https://go.dev/dl/go1.22.12.linux-amd64.tar.gz" \
             | tar -C /usr/local -xz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
           echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
@@ -80,9 +78,9 @@ jobs:
             curl \
             ca-certificates
 
-      - name: Install Go 1.13.15
+      - name: Install Go 1.22.12
         run: |
-          curl -fsSL "https://go.dev/dl/go1.13.15.linux-amd64.tar.gz" \
+          curl -fsSL "https://go.dev/dl/go1.22.12.linux-amd64.tar.gz" \
             | tar -C /usr/local -xz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
           echo "GOROOT=/usr/local/go" >> $GITHUB_ENV

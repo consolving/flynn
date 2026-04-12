@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -250,12 +249,12 @@ func (l *LibcontainerBackend) ConfigureNetworking(config *host.NetworkConfig) er
 
 	// enable IP forwarding
 	ipFwd := "/proc/sys/net/ipv4/ip_forward"
-	data, err := ioutil.ReadFile(ipFwd)
+	data, err := os.ReadFile(ipFwd)
 	if err != nil {
 		return err
 	}
 	if !bytes.HasPrefix(data, []byte("1")) {
-		if err := ioutil.WriteFile(ipFwd, []byte("1\n"), 0644); err != nil {
+		if err := os.WriteFile(ipFwd, []byte("1\n"), 0644); err != nil {
 			return err
 		}
 	}
@@ -282,7 +281,7 @@ func (l *LibcontainerBackend) ConfigureNetworking(config *host.NetworkConfig) er
 	if len(dnsConf.Search) > 0 {
 		resolvSearch = fmt.Sprintf("search %s\n", strings.Join(dnsConf.Search, " "))
 	}
-	if err := ioutil.WriteFile("/etc/flynn/resolv.conf", []byte(fmt.Sprintf("%snameserver %s\n", resolvSearch, l.bridgeAddr.String())), 0644); err != nil {
+	if err := os.WriteFile("/etc/flynn/resolv.conf", []byte(fmt.Sprintf("%snameserver %s\n", resolvSearch, l.bridgeAddr.String())), 0644); err != nil {
 		return err
 	}
 	l.resolvConf = "/etc/flynn/resolv.conf"
@@ -878,7 +877,7 @@ func (l *LibcontainerBackend) mountSquashfs(m *host.Mountspec) (string, error) {
 
 		// write the layer to a temp file and verify it has the
 		// expected hashes
-		tmp, err := ioutil.TempFile("", "flynn-layer-")
+		tmp, err := os.CreateTemp("", "flynn-layer-")
 		if err != nil {
 			return "", err
 		}
@@ -1350,7 +1349,7 @@ func (l *LibcontainerBackend) Attach(req *AttachRequest) (err error) {
 		var wg sync.WaitGroup
 		cp := func(w io.Writer, r io.Reader) {
 			if w == nil {
-				w = ioutil.Discard
+				w = io.Discard
 			}
 			wg.Add(1)
 			go func() {
@@ -1666,25 +1665,25 @@ func createCGroupPartition(name string, cpuShares int64) error {
 		}
 	}
 	for _, param := range []string{"cpuset.cpus", "cpuset.mems"} {
-		data, err := ioutil.ReadFile(filepath.Join(cgroupRoot, "cpuset", "flynn", param))
+		data, err := os.ReadFile(filepath.Join(cgroupRoot, "cpuset", "flynn", param))
 		if err != nil {
 			return fmt.Errorf("error reading cgroup param: %s", err)
 		}
 		if len(bytes.TrimSpace(data)) == 0 {
 			// Populate our parent cgroup to avoid ENOSPC when creating containers
-			data, err = ioutil.ReadFile(filepath.Join(cgroupRoot, "cpuset", param))
+			data, err = os.ReadFile(filepath.Join(cgroupRoot, "cpuset", param))
 			if err != nil {
 				return fmt.Errorf("error reading cgroup param: %s", err)
 			}
-			if err := ioutil.WriteFile(filepath.Join(cgroupRoot, "cpuset", "flynn", param), data, 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(cgroupRoot, "cpuset", "flynn", param), data, 0644); err != nil {
 				return fmt.Errorf("error writing cgroup param: %s", err)
 			}
 		}
-		if err := ioutil.WriteFile(filepath.Join(cgroupRoot, "cpuset", "flynn", name, param), data, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(cgroupRoot, "cpuset", "flynn", name, param), data, 0644); err != nil {
 			return fmt.Errorf("error writing cgroup param: %s", err)
 		}
 	}
-	if err := ioutil.WriteFile(filepath.Join(cgroupRoot, "cpu", "flynn", name, "cpu.shares"), strconv.AppendInt(nil, cpuShares, 10), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(cgroupRoot, "cpu", "flynn", name, "cpu.shares"), strconv.AppendInt(nil, cpuShares, 10), 0644); err != nil {
 		return fmt.Errorf("error writing cgroup param: %s", err)
 	}
 	return nil
@@ -1700,7 +1699,7 @@ func (t *Tmpfs) Delete() error {
 }
 
 func createTmpfs(size int64) (*Tmpfs, error) {
-	f, err := ioutil.TempFile("", "flynn-ext2-")
+	f, err := os.CreateTemp("", "flynn-ext2-")
 	if err != nil {
 		return nil, err
 	}
@@ -1720,12 +1719,12 @@ func createTmpfs(size int64) (*Tmpfs, error) {
 
 func forceMemoryOvercommit() error {
 	path := "/proc/sys/vm/overcommit_memory"
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	if !bytes.HasPrefix(data, []byte("1")) {
-		if err := ioutil.WriteFile(path, []byte("1"), 0640); err != nil {
+		if err := os.WriteFile(path, []byte("1"), 0640); err != nil {
 			return fmt.Errorf("error forcing overcommit: %s", err)
 		}
 	}

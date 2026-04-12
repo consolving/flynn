@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -37,7 +36,7 @@ func DownloadString(client *tuf.Client, path string) (string, error) {
 		return "", err
 	}
 	defer rc.Close()
-	data, err := ioutil.ReadAll(rc)
+	data, err := io.ReadAll(rc)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +44,7 @@ func DownloadString(client *tuf.Client, path string) (string, error) {
 }
 
 func NewTempFile() (*TempFile, error) {
-	file, err := ioutil.TempFile("", "flynn-tuf")
+	file, err := os.CreateTemp("", "flynn-tuf")
 	if err != nil {
 		return nil, err
 	}

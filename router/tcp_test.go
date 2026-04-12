@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"strconv"
 
@@ -66,7 +65,7 @@ func assertTCPConn(c *C, addr, prefix string) {
 	c.Assert(err, IsNil)
 	conn.Write([]byte("asdf"))
 	conn.(*net.TCPConn).CloseWrite()
-	res, err := ioutil.ReadAll(conn)
+	res, err := io.ReadAll(conn)
 	conn.Close()
 
 	c.Assert(err, IsNil)

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -82,7 +81,7 @@ func runUpdate(args *docopt.Args) error {
 
 	// read the TUF db so we can pass it to hosts
 	log.Info("reading TUF database")
-	tufDB, err := ioutil.ReadFile(args.String["--tuf-db"])
+	tufDB, err := os.ReadFile(args.String["--tuf-db"])
 	if err != nil {
 		log.Error("error reading the TUF database", "err", err)
 		return err
@@ -294,7 +293,7 @@ func updateAndExecLatest(configDir string, client *tuf.Client, log log15.Logger)
 	}
 	defer gz.Close()
 
-	tmp, err := ioutil.TempFile("", "flynn-host")
+	tmp, err := os.CreateTemp("", "flynn-host")
 	if err != nil {
 		log.Error("error creating temp file", "err", err)
 		return err

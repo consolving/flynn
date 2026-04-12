@@ -102,13 +102,13 @@ main() {
       go_ldflags="${go_ldflags} -X github.com/flynn/flynn/pkg/tufconfig.Repository=${tuf_repo}"
       go_ldflags="${go_ldflags} -X 'github.com/flynn/flynn/pkg/tufconfig.RootKeysJSON=${tuf_root_keys}'"
 
-      CGO_ENABLED=1 GO111MODULE=on go build -mod=vendor \
+      CGO_ENABLED=1 go build -mod=vendor \
         -ldflags "${go_ldflags}" \
         -o "${flynn_host}" ./host
       chmod +x "${flynn_host}"
 
       info "building flynn-init from source"
-      GO111MODULE=on go build -mod=vendor \
+      go build -mod=vendor \
         -o "${ROOT}/build/bin/flynn-init" ./host/flynn-init
       chmod +x "${ROOT}/build/bin/flynn-init"
 

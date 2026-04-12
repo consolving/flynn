@@ -3,7 +3,6 @@ package mux_test
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -62,7 +61,7 @@ func TestMux_Listen(t *testing.T) {
 	defer conn.Close()
 
 	// Read message.
-	if buf, err := ioutil.ReadAll(conn); err != nil {
+	if buf, err := io.ReadAll(conn); err != nil {
 		t.Fatal(err)
 	} else if string(buf) != "GET" {
 		t.Fatalf("unexpected message: %q", string(buf))
@@ -111,7 +110,7 @@ func TestMux_Listen_ErrUnregisteredHandler(t *testing.T) {
 	}
 
 	// Connection should close immediately.
-	if _, err := ioutil.ReadAll(conn); err != nil {
+	if _, err := io.ReadAll(conn); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 

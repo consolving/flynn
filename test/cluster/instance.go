@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -184,7 +183,7 @@ func (i *Instance) Start() error {
 
 func (i *Instance) createCOW(image string, temp bool) (string, error) {
 	name := strings.TrimSuffix(filepath.Base(image), filepath.Ext(image))
-	dir, err := ioutil.TempDir("", name+"-")
+	dir, err := os.MkdirTemp("", name+"-")
 	if err != nil {
 		return "", err
 	}

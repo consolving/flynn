@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -67,7 +66,7 @@ func run(tufDir, keysOut string) error {
 
 	// Step 1: Read current root metadata to get old key IDs
 	fmt.Println("=== Step 1: Reading current root metadata ===")
-	currentRootData, err := ioutil.ReadFile(rootPath)
+	currentRootData, err := os.ReadFile(rootPath)
 	if err != nil {
 		return fmt.Errorf("reading root.json: %s", err)
 	}
@@ -158,11 +157,11 @@ func run(tufDir, keysOut string) error {
 	for _, role := range roles {
 		src := filepath.Join(keysDir, role+".json")
 		dst := filepath.Join(keysOut, role+".json")
-		data, err := ioutil.ReadFile(src)
+		data, err := os.ReadFile(src)
 		if err != nil {
 			return fmt.Errorf("reading key file %s: %s", src, err)
 		}
-		if err := ioutil.WriteFile(dst, data, 0600); err != nil {
+		if err := os.WriteFile(dst, data, 0600); err != nil {
 			return fmt.Errorf("writing key file %s: %s", dst, err)
 		}
 		fmt.Printf("  Copied %s.json (%d bytes)\n", role, len(data))
@@ -188,7 +187,7 @@ func run(tufDir, keysOut string) error {
 	fmt.Println("\n=== Step 7: Summary ===")
 
 	// Read the final root.json to get the new public keys
-	finalRootData, err := ioutil.ReadFile(filepath.Join(tufDir, "repository", "root.json"))
+	finalRootData, err := os.ReadFile(filepath.Join(tufDir, "repository", "root.json"))
 	if err != nil {
 		return fmt.Errorf("reading final root.json: %s", err)
 	}
