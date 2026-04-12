@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"syscall"
@@ -72,7 +71,7 @@ func (t *TarWriter) WriteJSON(name string, v interface{}) error {
 }
 
 func (t *TarWriter) WriteCommandOutput(client controller.Client, name string, app string, newJob *ct.NewJob) error {
-	f, err := ioutil.TempFile("", name)
+	f, err := os.CreateTemp("", name)
 	if err != nil {
 		return fmt.Errorf("error creating temp file: %s", err)
 	}

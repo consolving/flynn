@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -220,7 +219,7 @@ func (e *exporter) buildBaseLayer(name, scriptPath string) (*ct.ImageLayer, erro
 	scriptAbs := filepath.Join(e.sourceDir, scriptPath)
 
 	// Create a temporary output directory for the squashfs
-	outDir, err := ioutil.TempDir("", "flynn-base-"+name)
+	outDir, err := os.MkdirTemp("", "flynn-base-"+name)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +253,7 @@ cp /mnt/out/layer.squashfs %q
 // importSquashfs reads a squashfs file, computes its hash, copies it to the
 // layer cache, and returns an ImageLayer.
 func (e *exporter) importSquashfs(squashfsPath string) (*ct.ImageLayer, error) {
-	data, err := ioutil.ReadFile(squashfsPath)
+	data, err := os.ReadFile(squashfsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +263,7 @@ func (e *exporter) importSquashfs(squashfsPath string) (*ct.ImageLayer, error) {
 
 	// Copy to layer cache
 	cachePath := filepath.Join(e.layerCache, id+".squashfs")
-	if err := ioutil.WriteFile(cachePath, data, 0644); err != nil {
+	if err := os.WriteFile(cachePath, data, 0644); err != nil {
 		return nil, err
 	}
 
@@ -283,7 +282,7 @@ func (e *exporter) importSquashfs(squashfsPath string) (*ct.ImageLayer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := ioutil.WriteFile(configPath, configData, 0644); err != nil {
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
 		return nil, err
 	}
 
@@ -307,7 +306,7 @@ func (e *exporter) buildComponentImages() error {
 
 func (e *exporter) buildComponentImage(spec imageSpec) error {
 	// Create a temporary directory with the component's file layout
-	tmpDir, err := ioutil.TempDir("", "flynn-img-"+spec.Name)
+	tmpDir, err := os.MkdirTemp("", "flynn-img-"+spec.Name)
 	if err != nil {
 		return err
 	}
@@ -685,7 +684,7 @@ func (e *exporter) generateManifests() error {
 	if err != nil {
 		return fmt.Errorf("generating images.json: %s", err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(manifestsDir, "images.json"), imagesJSON, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(manifestsDir, "images.json"), imagesJSON, 0644); err != nil {
 		return err
 	}
 
@@ -695,7 +694,7 @@ func (e *exporter) generateManifests() error {
 	if err != nil {
 		return fmt.Errorf("generating bootstrap-manifest.json: %s", err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(manifestsDir, "bootstrap-manifest.json"), bootstrapManifest, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(manifestsDir, "bootstrap-manifest.json"), bootstrapManifest, 0644); err != nil {
 		return err
 	}
 
@@ -705,7 +704,7 @@ func (e *exporter) generateManifests() error {
 func (e *exporter) generateImagesJSON() ([]byte, error) {
 	// Read the template
 	templatePath := filepath.Join(e.sourceDir, "util/release/images_template.json")
-	template, err := ioutil.ReadFile(templatePath)
+	template, err := os.ReadFile(templatePath)
 	if err != nil {
 		return nil, err
 	}
@@ -747,7 +746,7 @@ func (e *exporter) generateImagesJSON() ([]byte, error) {
 
 func (e *exporter) generateBootstrapManifest() ([]byte, error) {
 	templatePath := filepath.Join(e.sourceDir, "bootstrap/manifest_template.json")
-	template, err := ioutil.ReadFile(templatePath)
+	template, err := os.ReadFile(templatePath)
 	if err != nil {
 		return nil, err
 	}
@@ -858,7 +857,7 @@ func (e *exporter) stageTUFTargets() error {
 		srcPath := filepath.Join(manifestsDir, manifest)
 
 		// Read the manifest and rewrite layer URLs
-		data, err := ioutil.ReadFile(srcPath)
+		data, err := os.ReadFile(srcPath)
 		if err != nil {
 			return fmt.Errorf("reading %s: %s", manifest, err)
 		}
@@ -884,7 +883,7 @@ func (e *exporter) stageTUFTargets() error {
 		if err := os.MkdirAll(filepath.Dir(imagePath), 0755); err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(imagePath, artifact.RawManifest, 0644); err != nil {
+		if err := os.WriteFile(imagePath, artifact.RawManifest, 0644); err != nil {
 			return err
 		}
 		if err := repo.AddTarget(imageTarget, targetMeta); err != nil {
@@ -921,7 +920,7 @@ func (e *exporter) stageTUFTargets() error {
 					return err
 				}
 				layerConfigDst := filepath.Join(stagedTargetsDir, layerConfigTarget)
-				if err := ioutil.WriteFile(layerConfigDst, layerConfigData, 0644); err != nil {
+				if err := os.WriteFile(layerConfigDst, layerConfigData, 0644); err != nil {
 					return err
 				}
 				if err := repo.AddTarget(layerConfigTarget, targetMeta); err != nil {
@@ -940,7 +939,7 @@ func (e *exporter) stageTUFTargets() error {
 	if err := os.MkdirAll(filepath.Dir(channelPath), 0755); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(channelPath, []byte(e.version+"\n"), 0644); err != nil {
+	if err := os.WriteFile(channelPath, []byte(e.version+"\n"), 0644); err != nil {
 		return err
 	}
 	if err := repo.AddTarget(channelTarget, targetMeta); err != nil {
@@ -965,7 +964,7 @@ func (e *exporter) stageTUFTargets() error {
 }
 
 func (e *exporter) stageGzipped(stagedTargetsDir, target, srcPath string) error {
-	data, err := ioutil.ReadFile(srcPath)
+	data, err := os.ReadFile(srcPath)
 	if err != nil {
 		return err
 	}
@@ -996,11 +995,11 @@ func (e *exporter) stageGzippedData(stagedTargetsDir, target string, data []byte
 // ----- Utilities -----
 
 func copyFile(src, dst string, perm os.FileMode) error {
-	data, err := ioutil.ReadFile(src)
+	data, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(dst, data, perm)
+	return os.WriteFile(dst, data, perm)
 }
 
 func humanSize(bytes int64) string {

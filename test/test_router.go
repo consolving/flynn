@@ -3,7 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,7 +69,7 @@ func (s *RouterSuite) TestAdditionalHttpPorts(t *c.C) {
 	res.Body.Close()
 
 	writeTemp := func(data, prefix string) (string, error) {
-		f, err := ioutil.TempFile(os.TempDir(), fmt.Sprintf("flynn-test-%s", prefix))
+		f, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("flynn-test-%s", prefix))
 		t.Assert(err, c.IsNil)
 		_, err = f.WriteString(data)
 		t.Assert(err, c.IsNil)
@@ -137,7 +137,7 @@ func (s *RouterSuite) TestCustom503ErrorPage(t *c.C) {
 	res, err := http.Get("http://" + appName + "." + x.Domain)
 	t.Assert(err, c.IsNil)
 	t.Assert(res.StatusCode, c.Equals, http.StatusServiceUnavailable)
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	t.Assert(err, c.IsNil)
 	t.Assert(strings.Contains(string(body), "google"), c.Equals, true, c.Commentf("body = %q", string(body)))

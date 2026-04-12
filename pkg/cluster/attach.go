@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"sync"
 
@@ -38,7 +37,7 @@ func (c *Host) Attach(req *host.AttachReq, wait bool) (AttachClient, error) {
 		case host.AttachSuccess:
 			return nil
 		case host.AttachError:
-			errBytes, err := ioutil.ReadAll(rwc)
+			errBytes, err := io.ReadAll(rwc)
 			rwc.Close()
 			if err != nil {
 				return err

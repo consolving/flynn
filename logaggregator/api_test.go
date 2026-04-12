@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"time"
 
 	"github.com/flynn/flynn/logaggregator/client"
@@ -231,7 +230,7 @@ func (s *LogAggregatorTestSuite) TestMessageMarshalJSON(c *C) {
 func assertAllLogsEquals(c *C, r io.Reader, expected string) {
 	donec := make(chan struct{})
 	go func() {
-		logb, err := ioutil.ReadAll(r)
+		logb, err := io.ReadAll(r)
 		c.Assert(err, IsNil)
 		result := string(logb)
 		c.Assert(result, Equals, expected)

@@ -12,11 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"context"
+
 	"github.com/flynn/flynn/pkg/random"
 	router "github.com/flynn/flynn/router/types"
 	"github.com/inconshreveable/log15"
 	"golang.org/x/crypto/nacl/secretbox"
-	"golang.org/x/net/context"
 )
 
 type backendDialer interface {

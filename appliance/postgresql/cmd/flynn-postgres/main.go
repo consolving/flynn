@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,14 +29,14 @@ func main() {
 
 	const dataDir = "/data"
 	idFile := filepath.Join(dataDir, "instance_id")
-	idBytes, err := ioutil.ReadFile(idFile)
+	idBytes, err := os.ReadFile(idFile)
 	if err != nil && !os.IsNotExist(err) {
 		shutdown.Fatalf("error reading instance ID: %s", err)
 	}
 	id := string(idBytes)
 	if len(id) == 0 {
 		id = random.UUID()
-		if err := ioutil.WriteFile(idFile, []byte(id), 0644); err != nil {
+		if err := os.WriteFile(idFile, []byte(id), 0644); err != nil {
 			shutdown.Fatalf("error writing instance ID: %s", err)
 		}
 	}

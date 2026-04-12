@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"context"
+
 	"github.com/flynn/flynn/discoverd/cache"
 	discoverd "github.com/flynn/flynn/discoverd/client"
 	"github.com/flynn/flynn/pkg/ctxhelper"
@@ -21,7 +23,6 @@ import (
 	"github.com/flynn/flynn/router/proxy"
 	"github.com/flynn/flynn/router/proxyproto"
 	router "github.com/flynn/flynn/router/types"
-	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 )
 

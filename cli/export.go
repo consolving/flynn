@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -131,7 +130,7 @@ func runExport(args *docopt.Args, client controller.Client) error {
 			DisableLog:         true,
 			Args:               []string{"curl", "--include", "--http1.1", "--location", "--raw", url},
 			Stdout:             reqW,
-			Stderr:             ioutil.Discard,
+			Stderr:             io.Discard,
 		}
 		if bar != nil {
 			config.Stdout = io.MultiWriter(config.Stdout, bar)
@@ -355,7 +354,7 @@ func runImport(args *docopt.Args, client controller.Client) error {
 
 		filename := path.Base(header.Name)
 		if strings.HasSuffix(filename, ".layer") {
-			f, err := ioutil.TempFile("", "flynn-layer-")
+			f, err := os.CreateTemp("", "flynn-layer-")
 			if err != nil {
 				return fmt.Errorf("error creating layer tempfile: %s", err)
 			}
@@ -406,7 +405,7 @@ func runImport(args *docopt.Args, client controller.Client) error {
 				route.ParentRef = ""
 			}
 		case "slug.tar.gz":
-			f, err := ioutil.TempFile("", "slug.tar.gz")
+			f, err := os.CreateTemp("", "slug.tar.gz")
 			if err != nil {
 				return fmt.Errorf("error creating slug tempfile: %s", err)
 			}
@@ -425,7 +424,7 @@ func runImport(args *docopt.Args, client controller.Client) error {
 				return fmt.Errorf("error decoding docker image json: %s", err)
 			}
 		case "docker-image.tar":
-			f, err := ioutil.TempFile("", "docker-image.tar")
+			f, err := os.CreateTemp("", "docker-image.tar")
 			if err != nil {
 				return fmt.Errorf("error creating docker image tempfile: %s", err)
 			}
@@ -440,7 +439,7 @@ func runImport(args *docopt.Args, client controller.Client) error {
 			dockerImage.archive = f
 			uploadSize += header.Size
 		case "postgres.dump":
-			f, err := ioutil.TempFile("", "postgres.dump")
+			f, err := os.CreateTemp("", "postgres.dump")
 			if err != nil {
 				return fmt.Errorf("error creating db tempfile: %s", err)
 			}
@@ -455,7 +454,7 @@ func runImport(args *docopt.Args, client controller.Client) error {
 			pgDump = f
 			uploadSize += header.Size
 		case "mysql.dump":
-			f, err := ioutil.TempFile("", "mysql.dump")
+			f, err := os.CreateTemp("", "mysql.dump")
 			if err != nil {
 				return fmt.Errorf("error creating db tempfile: %s", err)
 			}
@@ -634,8 +633,8 @@ func runImport(args *docopt.Args, client controller.Client) error {
 				DisableLog: true,
 				Args:       []string{"/bin/convert-legacy-slug.sh"},
 				Stdin:      legacySlug,
-				Stdout:     ioutil.Discard,
-				Stderr:     ioutil.Discard,
+				Stdout:     io.Discard,
+				Stderr:     io.Discard,
 				Env:        map[string]string{"SLUG_IMAGE_ID": slugImageID},
 			}
 			if bar != nil {
@@ -700,8 +699,8 @@ func runImport(args *docopt.Args, client controller.Client) error {
 				DisableLog: true,
 				Args:       []string{"curl", "--request", "PUT", "--upload-file", "-", url},
 				Stdin:      layer,
-				Stdout:     ioutil.Discard,
-				Stderr:     ioutil.Discard,
+				Stdout:     io.Discard,
+				Stderr:     io.Discard,
 			}
 			if bar != nil {
 				config.Stdin = bar.NewProxyReader(config.Stdin)
@@ -792,8 +791,8 @@ func runImport(args *docopt.Args, client controller.Client) error {
 			DisableLog: true,
 			Args:       []string{"curl", "--request", "PUT", "--upload-file", "-", slugURI},
 			Stdin:      legacySlug,
-			Stdout:     ioutil.Discard,
-			Stderr:     ioutil.Discard,
+			Stdout:     io.Discard,
+			Stderr:     io.Discard,
 		}
 		if bar != nil {
 			config.Stdin = bar.NewProxyReader(config.Stdin)

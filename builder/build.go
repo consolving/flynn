@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"go/build"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -667,7 +666,7 @@ func (b *Builder) WriteManifests(manifests map[string]string, tufRepository stri
 		dst := filepath.Join("build", "manifests", name)
 		b.log.Debug("writing manifest", "src", src, "dst", dst)
 
-		manifest, err := ioutil.ReadFile(src)
+		manifest, err := os.ReadFile(src)
 		if err != nil {
 			return err
 		}
@@ -696,7 +695,7 @@ func (b *Builder) WriteManifests(manifests map[string]string, tufRepository stri
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(dst, manifest, 0644); err != nil {
+		if err := os.WriteFile(dst, manifest, 0644); err != nil {
 			return err
 		}
 	}
@@ -769,7 +768,7 @@ func (b *Builder) GetCachedLayer(name, id string) (*ct.ImageLayer, error) {
 	if _, err := io.Copy(f, tmp); err != nil {
 		return nil, fmt.Errorf("error writing layer to cache: %s", err)
 	}
-	if err := ioutil.WriteFile(b.layerConfigPath(id), []byte(data), 0644); err != nil {
+	if err := os.WriteFile(b.layerConfigPath(id), []byte(data), 0644); err != nil {
 		return nil, fmt.Errorf("error writing layer to cache: %s", err)
 	}
 	return layer, nil
@@ -788,7 +787,7 @@ func (b *Builder) BuildLayer(l *Layer, id, name string, run []string, env map[st
 	// create a shared directory containing the inputs so we can ensure the
 	// job only accesses declared inputs (thus enforcing the correctness of
 	// the generated layer ID)
-	dir, err := ioutil.TempDir("", "flynn-build-mnt")
+	dir, err := os.MkdirTemp("", "flynn-build-mnt")
 	if err != nil {
 		return nil, err
 	}
@@ -1011,7 +1010,7 @@ func (b *Builder) BuildLayer(l *Layer, id, name string, run []string, env map[st
 	if err != nil {
 		return nil, fmt.Errorf("error encoding layer config: %s", err)
 	}
-	if err := ioutil.WriteFile(b.layerConfigPath(id), data, 0644); err != nil {
+	if err := os.WriteFile(b.layerConfigPath(id), data, 0644); err != nil {
 		return nil, fmt.Errorf("error writing to layer cache: %s", err)
 	}
 	return layer, nil

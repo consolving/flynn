@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -620,7 +619,7 @@ var appIDPrefixPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4
 // with them, from oldest to newest. There is always at least one file, the
 // current log for the app.
 func (m *Mux) logFiles(app string) (map[string][]string, error) {
-	files, err := ioutil.ReadDir(m.logDir)
+	files, err := os.ReadDir(m.logDir)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -84,7 +84,7 @@ func TestMultiBackendMigration(t *testing.T) {
 	if ct := res.Header.Get("Content-Type"); ct != typ {
 		t.Fatalf("exected type %q, got %q", typ, ct)
 	}
-	contents, err := ioutil.ReadAll(res.Body)
+	contents, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

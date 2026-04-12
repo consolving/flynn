@@ -2,7 +2,7 @@ package server_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"reflect"
@@ -783,7 +783,7 @@ func NewStore() *Store {
 func NewStoreWithConfig(config StoreConfig) *Store {
 	if config.Path == "" {
 		// Generate a temporary path.
-		f, _ := ioutil.TempFile("", "discoverd-store-")
+		f, _ := os.CreateTemp("", "discoverd-store-")
 		f.Close()
 		os.Remove(f.Name())
 		config.Path = f.Name()
@@ -813,7 +813,7 @@ func NewStoreWithConfig(config StoreConfig) *Store {
 
 	// Turn off logs if verbose flag is not set.
 	if !testing.Verbose() {
-		s.LogOutput = ioutil.Discard
+		s.LogOutput = io.Discard
 	}
 
 	return s

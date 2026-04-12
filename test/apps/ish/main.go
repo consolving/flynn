@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -48,7 +47,7 @@ func ish(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "405 Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, _ := ioutil.ReadAll(req.Body)
+	body, _ := io.ReadAll(req.Body)
 
 	cmd := exec.Command("/bin/sh", "-c", string(body)) // no bash in busybox
 	cmd.Stdout = io.MultiWriter(resp, os.Stdout)

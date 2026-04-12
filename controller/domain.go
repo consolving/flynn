@@ -10,7 +10,7 @@ import (
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/tlscert"
 	que "github.com/flynn/que-go"
-	"golang.org/x/net/context"
+	"context"
 )
 
 func (c *controllerAPI) MigrateDomain(ctx context.Context, w http.ResponseWriter, req *http.Request) {

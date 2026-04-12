@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,8 +17,8 @@ import (
 	"github.com/flynn/flynn/controller/client"
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/controller/utils"
-	"github.com/flynn/flynn/discoverd/client"
-	"github.com/flynn/flynn/host/types"
+	discoverd "github.com/flynn/flynn/discoverd/client"
+	host "github.com/flynn/flynn/host/types"
 	"github.com/flynn/flynn/host/volume"
 	logaggc "github.com/flynn/flynn/logaggregator/client"
 	logagg "github.com/flynn/flynn/logaggregator/types"
@@ -149,8 +149,8 @@ func (s *HostSuite) TestExecCrashingJob(t *c.C) {
 		t.Logf("attach = %v", attach)
 		cmd := exec.CommandUsingCluster(cluster, s.createArtifact(t, "test-apps"), "sh", "-c", "exit 1")
 		if attach {
-			cmd.Stdout = ioutil.Discard
-			cmd.Stderr = ioutil.Discard
+			cmd.Stdout = io.Discard
+			cmd.Stderr = io.Discard
 		}
 		t.Assert(cmd.Run(), c.DeepEquals, exec.ExitError(1))
 	}
@@ -303,7 +303,7 @@ func (a *IshApp) run(cmd string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}

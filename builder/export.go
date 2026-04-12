@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -178,7 +177,7 @@ func (e *Exporter) ExportBinary(name, target string) error {
 
 func (e *Exporter) ExportManifest(name, target string) error {
 	e.log.Info(fmt.Sprintf("exporting %s", name), "target", target)
-	manifest, err := ioutil.ReadFile(filepath.Join("build", "manifests", name))
+	manifest, err := os.ReadFile(filepath.Join("build", "manifests", name))
 	if err != nil {
 		return fmt.Errorf("error reading manifest %s: %s", name, err)
 	}
@@ -241,7 +240,7 @@ func (e *Exporter) ExportImage(name string, artifact *ct.Artifact) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(path, artifact.RawManifest, 0644); err != nil {
+	if err := os.WriteFile(path, artifact.RawManifest, 0644); err != nil {
 		return err
 	}
 

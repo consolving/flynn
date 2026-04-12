@@ -18,7 +18,7 @@ import (
 	"github.com/flynn/flynn/pkg/random"
 	"github.com/jackc/pgx"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 )
 
 type ErrorCode string

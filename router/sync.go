@@ -6,8 +6,9 @@ import (
 	"path"
 	"sort"
 
+	"context"
+
 	router "github.com/flynn/flynn/router/types"
-	"golang.org/x/net/context"
 )
 
 var ErrNotFound = errors.New("router: route not found")

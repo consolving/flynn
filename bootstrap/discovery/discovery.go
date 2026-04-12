@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -47,7 +46,7 @@ func RegisterInstance(info Info) (string, error) {
 	}}
 
 	for _, t := range []string{"dsa", "rsa", "ecdsa", "ed25519"} {
-		keyData, err := ioutil.ReadFile(fmt.Sprintf("/etc/ssh/ssh_host_%s_key.pub", t))
+		keyData, err := os.ReadFile(fmt.Sprintf("/etc/ssh/ssh_host_%s_key.pub", t))
 		if err != nil {
 			// TODO(titanous): log this?
 			continue

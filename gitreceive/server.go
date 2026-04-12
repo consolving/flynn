@@ -14,7 +14,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -336,7 +335,7 @@ func blobstoreCacheURL(cacheKey string) string {
 }
 
 func prepareRepo(cacheKey string) (string, error) {
-	path, err := ioutil.TempDir("", "repo-"+cacheKey)
+	path, err := os.MkdirTemp("", "repo-"+cacheKey)
 	if err != nil {
 		return "", err
 	}
@@ -380,7 +379,7 @@ func initRepo(path string) error {
 }
 
 func writeRepoHook(path string) error {
-	return ioutil.WriteFile(filepath.Join(path, ".git", "hooks", "pre-receive"), prereceiveHook, 0755)
+	return os.WriteFile(filepath.Join(path, ".git", "hooks", "pre-receive"), prereceiveHook, 0755)
 }
 
 func setGitConfig(path string) error {

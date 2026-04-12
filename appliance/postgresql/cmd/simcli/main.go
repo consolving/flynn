@@ -1,4 +1,5 @@
 // Don't build to avoid vendoring uniline
+//go:build ignore
 // +build ignore
 
 package main

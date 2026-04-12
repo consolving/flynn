@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/go-units"
+	units "github.com/docker/go-units"
 	"github.com/flynn/flynn/cli/config"
 	controller "github.com/flynn/flynn/controller/client"
 	ct "github.com/flynn/flynn/controller/types"
@@ -352,7 +351,7 @@ func (h *hostnames) Remove(t *c.C, ip string) {
 	}
 	f.Close()
 	t.Assert(s.Err(), c.IsNil)
-	t.Assert(ioutil.WriteFile("/etc/hosts", data.Bytes(), 0644), c.IsNil)
+	t.Assert(os.WriteFile("/etc/hosts", data.Bytes(), 0644), c.IsNil)
 }
 
 const (
@@ -617,7 +616,7 @@ func (h *Helper) newGitRepoWithTrace(t *c.C, nameOrURL string, trace bool) *gitR
 		t.Assert(run(t, exec.Command("cp", "-r", filepath.Join("apps", nameOrURL), dir)), Succeeds)
 	} else {
 		t.Assert(os.Mkdir(dir, 0755), c.IsNil)
-		t.Assert(ioutil.WriteFile(filepath.Join(dir, "file.txt"), []byte("app"), 0644), c.IsNil)
+		t.Assert(os.WriteFile(filepath.Join(dir, "file.txt"), []byte("app"), 0644), c.IsNil)
 	}
 
 	t.Assert(r.git("init"), Succeeds)

@@ -14,7 +14,7 @@ import (
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/sse"
 	que "github.com/flynn/que-go"
-	"golang.org/x/net/context"
+	"context"
 )
 
 type appUpdate map[string]interface{}

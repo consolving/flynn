@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -162,7 +161,7 @@ func updateTUFClient(client *tuf.Client) error {
 // using the TUF client.
 func getChannelVersion(configDir string, client *tuf.Client, log log15.Logger) (string, error) {
 	log.Info("getting configured release channel")
-	data, err := ioutil.ReadFile(filepath.Join(configDir, "channel.txt"))
+	data, err := os.ReadFile(filepath.Join(configDir, "channel.txt"))
 	if err != nil {
 		log.Error("error getting configured release channel", "err", err)
 		return "", err

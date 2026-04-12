@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -102,7 +101,7 @@ func (s *server) handleGetLayer(w http.ResponseWriter, r *http.Request, p httpro
 		http.NotFound(w, r)
 		return
 	} else if res.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		httphelper.Error(w, fmt.Errorf("unexpected blobstore response: %s: %s", res.Status, body))
 		return
 	}
@@ -119,7 +118,7 @@ func (s *server) handleCreateLayer(w http.ResponseWriter, r *http.Request, p htt
 
 	layer, err := func() (*ct.ImageLayer, error) {
 		// copy the tar to a temp file and generate its SHA256 hash
-		tmpDir, err := ioutil.TempDir("", "")
+		tmpDir, err := os.MkdirTemp("", "")
 		if err != nil {
 			return nil, err
 		}

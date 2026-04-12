@@ -2,7 +2,7 @@ package data
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -161,7 +161,7 @@ func downloadManifest(artifact *ct.Artifact) error {
 	}
 
 	r := verifier.Reader(res.Body)
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

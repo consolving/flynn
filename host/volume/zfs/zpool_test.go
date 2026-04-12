@@ -2,7 +2,6 @@ package zfs
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -167,7 +166,7 @@ func (ZpoolTests) TestOrphanedZpoolFileAdoption(c *C) {
 func (ZpoolTests) TestNonZpoolFilesFailImport(c *C) {
 	dataset := "testpool-landslide"
 
-	backingFile, err := ioutil.TempFile("/tmp/", "zfs-")
+	backingFile, err := os.CreateTemp("/tmp/", "zfs-")
 	c.Assert(err, IsNil)
 	backingFile.Write([]byte{'a', 'b', 'c'})
 	backingFile.Close()

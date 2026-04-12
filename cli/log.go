@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 
@@ -69,7 +68,7 @@ func runLog(args *docopt.Args, client controller.Client) error {
 	if args.Bool["--split-stderr"] {
 		stderr = os.Stderr
 	}
-	var initOut io.Writer = ioutil.Discard
+	var initOut io.Writer = io.Discard
 	if args.Bool["--init"] {
 		initOut = os.Stderr
 	}

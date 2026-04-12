@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -212,7 +211,7 @@ func runReleaseAddDocker(args *docopt.Args, client controller.Client) error {
 	}
 	release := &ct.Release{}
 	if args.String["--file"] != "" {
-		data, err := ioutil.ReadFile(args.String["--file"])
+		data, err := os.ReadFile(args.String["--file"])
 		if err != nil {
 			return err
 		}
@@ -259,7 +258,7 @@ func runReleaseUpdate(args *docopt.Args, client controller.Client) error {
 	}
 
 	updates := &ct.Release{}
-	data, err := ioutil.ReadFile(args.String["<file>"])
+	data, err := os.ReadFile(args.String["<file>"])
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -326,7 +325,7 @@ type BackupInfo struct {
 }
 
 func (p *Process) extractBackupInfo() (*BackupInfo, error) {
-	buf, err := ioutil.ReadFile(filepath.Join(p.DataDir, "xtrabackup_binlog_info"))
+	buf, err := os.ReadFile(filepath.Join(p.DataDir, "xtrabackup_binlog_info"))
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +356,7 @@ func (p *Process) Restore(r io.Reader) (*BackupInfo, error) {
 
 func (p *Process) unpackXbstream(r io.Reader) error {
 	cmd := exec.Command(filepath.Join(p.BinDir, "xbstream"), "-x", "--directory="+p.DataDir)
-	cmd.Stdin = ioutil.NopCloser(r)
+	cmd.Stdin = io.NopCloser(r)
 
 	if buf, err := cmd.CombinedOutput(); err != nil {
 		p.Logger.Error("xbstream failed", "err", err, "output", string(buf))
@@ -437,7 +436,7 @@ func (p *Process) assumeStandby(upstream, downstream *discoverd.Instance) error 
 
 			return nil
 		}(); err != nil {
-			if files, err := ioutil.ReadDir("/data"); err == nil {
+			if files, err := os.ReadDir("/data"); err == nil {
 				for _, file := range files {
 					os.RemoveAll(filepath.Join("/data", file.Name()))
 				}

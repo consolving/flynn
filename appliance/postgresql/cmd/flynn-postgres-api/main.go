@@ -13,7 +13,7 @@ import (
 	"github.com/flynn/flynn/pkg/resource"
 	"github.com/flynn/flynn/pkg/shutdown"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
+	"context"
 )
 
 const (

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -193,7 +192,7 @@ func (m *Main) Close() error {
 // readID reads the instance id from path.
 // If the file instance id doesn't exist then a random ID is generated.
 func (m *Main) readID(path string) (string, error) {
-	buf, err := ioutil.ReadFile(path)
+	buf, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("error reading instance ID: %s", err)
 	}
@@ -206,7 +205,7 @@ func (m *Main) readID(path string) (string, error) {
 
 	// Generate a new ID and write it to file.
 	id = random.UUID()
-	if err := ioutil.WriteFile(path, []byte(id), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(id), 0644); err != nil {
 		return "", fmt.Errorf("error writing instance ID: %s", err)
 	}
 	return id, nil

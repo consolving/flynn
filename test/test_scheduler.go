@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	ct "github.com/flynn/flynn/controller/types"
-	"github.com/flynn/flynn/discoverd/client"
+	discoverd "github.com/flynn/flynn/discoverd/client"
 	"github.com/flynn/flynn/host/types"
 	logaggc "github.com/flynn/flynn/logaggregator/client"
 	logagg "github.com/flynn/flynn/logaggregator/types"
@@ -19,7 +19,7 @@ import (
 	"github.com/flynn/flynn/pkg/random"
 	"github.com/flynn/flynn/pkg/typeconv"
 	routerc "github.com/flynn/flynn/router/client"
-	"github.com/flynn/flynn/router/types"
+	router "github.com/flynn/flynn/router/types"
 	c "github.com/flynn/go-check"
 )
 
@@ -844,7 +844,7 @@ func (s *SchedulerSuite) TestGracefulShutdown(t *c.C) {
 		t.Assert(res.StatusCode, c.Equals, http.StatusOK)
 		go func() {
 			defer res.Body.Close()
-			data, err := ioutil.ReadAll(res.Body)
+			data, err := io.ReadAll(res.Body)
 			if err == nil && !bytes.Equal(data, []byte("done")) {
 				err = fmt.Errorf("unexpected response: %q", data)
 			}

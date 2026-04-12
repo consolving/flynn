@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -72,14 +71,14 @@ Options:
 
 	if clientKey != "" {
 		ensureDir(homeFolder)
-		if err := ioutil.WriteFile(filepath.Join(homeFolder, ".ssh", "id_rsa"), []byte(clientKey), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(homeFolder, ".ssh", "id_rsa"), []byte(clientKey), 0600); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	if clientHosts != "" {
 		ensureDir(homeFolder)
-		if err := ioutil.WriteFile(filepath.Join(homeFolder, ".ssh", "known_hosts"), []byte(clientHosts), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(homeFolder, ".ssh", "known_hosts"), []byte(clientHosts), 0600); err != nil {
 			log.Fatal(err)
 		}
 	}

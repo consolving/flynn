@@ -1,6 +1,6 @@
 # Dockerfile.ci — Reproducible build environment for Flynn CI
 #
-# This image provides Go 1.13.15 with CGO support and all system dependencies
+# This image provides Go 1.22.12 with CGO support and all system dependencies
 # needed to build all Flynn components and run unit tests.
 #
 # Usage:
@@ -10,7 +10,7 @@
 # For unit tests:
 #   docker run --rm -v $(pwd):/go/src/github.com/flynn/flynn -w /go/src/github.com/flynn/flynn flynn-ci make test-unit-standalone
 
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -37,8 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Go 1.13.15 (the required version for this project)
-ENV GO_VERSION=1.13.15
+# Install Go 1.22.12 (latest patch release of Go 1.22)
+ENV GO_VERSION=1.22.12
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
     | tar -C /usr/local -xz
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -31,7 +30,7 @@ func RunDiscoverdServer(t TestingT, port string) (string, func()) {
 	}
 
 	// Generate a data directory.
-	dataDir, _ := ioutil.TempDir("", "testutil-")
+	dataDir, _ := os.MkdirTemp("", "testutil-")
 
 	go func() {
 		cmd := exec.Command("discoverd",

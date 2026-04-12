@@ -10,7 +10,7 @@ import (
 	"github.com/flynn/flynn/pkg/ctxhelper"
 	"github.com/flynn/flynn/pkg/httphelper"
 	router "github.com/flynn/flynn/router/types"
-	"golang.org/x/net/context"
+	"context"
 )
 
 func (c *controllerAPI) CreateRoute(ctx context.Context, w http.ResponseWriter, req *http.Request) {

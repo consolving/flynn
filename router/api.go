@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"context"
+
 	"github.com/flynn/flynn/pkg/ctxhelper"
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/pprof"
@@ -11,7 +13,6 @@ import (
 	"github.com/flynn/flynn/pkg/status"
 	router "github.com/flynn/flynn/router/types"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
 )
 
 type API struct {

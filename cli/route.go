@@ -5,7 +5,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -277,7 +277,7 @@ func parseTLSCert(args *docopt.Args) (string, string, error) {
 
 		if tlsCertPath == "-" || tlsKeyPath == "-" {
 			var err error
-			stdin, err = ioutil.ReadAll(os.Stdin)
+			stdin, err = io.ReadAll(os.Stdin)
 			if err != nil {
 				return "", "", fmt.Errorf("Failed to read from stdin: %s", err)
 			}
@@ -316,7 +316,7 @@ func readPEM(typ string, path string, stdin []byte) ([]byte, error) {
 		}
 		return nil, errors.New("No PEM blocks found in stdin")
 	}
-	return ioutil.ReadFile(path)
+	return os.ReadFile(path)
 }
 
 func runRouteRemove(args *docopt.Args, client controller.Client) error {

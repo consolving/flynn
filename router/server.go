@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -190,7 +189,7 @@ func main() {
 				log.Error("unexpected status code getting ERROR_503_PAGE_URL", "status", res.StatusCode)
 				return
 			}
-			error503Page, err = ioutil.ReadAll(&io.LimitedReader{R: res.Body, N: 1000000})
+			error503Page, err = io.ReadAll(&io.LimitedReader{R: res.Body, N: 1000000})
 			if err != nil {
 				log.Error("error reading ERROR_503_PAGE_URL", "err", err)
 				return

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"mime"
 	"mime/multipart"
@@ -310,7 +309,7 @@ timeout --signal=QUIT --kill-after=10 45m /tmp/run-tests.sh
 var failPattern = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3} FAIL: (?:\S+) (\S+)$`)
 
 func (r *Runner) build(b *Build) (err error) {
-	logFile, err := ioutil.TempFile("", "build-log")
+	logFile, err := os.CreateTemp("", "build-log")
 	if err != nil {
 		return err
 	}

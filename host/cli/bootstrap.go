@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -48,9 +47,9 @@ Bootstrap layer 1 using the provided manifest`)
 
 func readBootstrapManifest(name string) ([]byte, error) {
 	if name == "" || name == "-" {
-		return ioutil.ReadAll(os.Stdin)
+		return io.ReadAll(os.Stdin)
 	}
-	return ioutil.ReadFile(name)
+	return os.ReadFile(name)
 }
 
 var manifest []byte
