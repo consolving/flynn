@@ -11,7 +11,7 @@ import (
 	"github.com/flynn/flynn/pkg/version"
 )
 
-var telemetryURL = "https://dl.flynn.io/measure/scheduler"
+var telemetryURL = "" // original dl.flynn.io endpoint is offline; set TELEMETRY_URL env to re-enable
 
 func init() {
 	if u := os.Getenv("TELEMETRY_URL"); u != "" {
@@ -35,7 +35,7 @@ func (s *Scheduler) triggerSendTelemetry() {
 }
 
 func (s *Scheduler) SendTelemetry() {
-	if !s.IsLeader() || os.Getenv("TELEMETRY_DISABLED") == "true" {
+	if telemetryURL == "" || !s.IsLeader() || os.Getenv("TELEMETRY_DISABLED") == "true" {
 		return
 	}
 

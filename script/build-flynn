@@ -18,6 +18,7 @@ OPTIONS:
   -f, --force-bootstrap   Force bootstrap
   --host=HOST             Host to run the build on
   --git-version           Generate the version using git status
+  --skip-download         Skip TUF download step (use locally built binaries only)
 USAGE
 }
 
@@ -26,6 +27,7 @@ main() {
   local version="dev"
   local verbose=false
   local force_bootstrap=false
+  local skip_download=false
 
   while true; do
     case "$1" in
@@ -59,6 +61,10 @@ main() {
         version="$(git_version)"
         shift
         ;;
+      --skip-download)
+        skip_download=true
+        shift
+        ;;
       *)
         break
         ;;
@@ -73,37 +79,66 @@ main() {
   local flynn_host="${ROOT}/build/bin/flynn-host"
   local builder_image="${ROOT}/build/image/builder.json"
 
-  # if building from clean, download binaries + images
+  # TUF repository configuration (new self-hosted repo)
+  local tuf_repo="${FLYNN_TUF_REPOSITORY:-"https://consolving.github.io/flynn-tuf-repo/repository"}"
+
+  # if building from clean, build flynn-host locally instead of downloading
+  # from the now-offline dl.flynn.io
   if ! [[ -e "${builder_image}" ]]; then
-    local sha="de87e0d04d262a134fe7e7471e3c4c20e40ae229f20bf753a54a78656f72737e1a3ef3e8a165e8d4e39201f412173faf9bf4518c24678681ff5449e95fb82374"
-    local url="https://dl.flynn.io/tuf/targets/${sha}.flynn-host.gz"
-
-    info "downloading flynn-host from ${url}"
     mkdir -p "${ROOT}/build/bin"
-    curl -fsSLo "${flynn_host}.gz" "${url}"
-    echo "${sha}  ${flynn_host}.gz" | shasum -a "512" -c -
-    gunzip --force "${flynn_host}.gz"
-    chmod +x "${flynn_host}"
 
-    # kill existing cluster to unlock the volume database
-    "${ROOT}/script/kill-flynn"
+    # Build flynn-host from source if not already present
+    if ! [[ -e "${flynn_host}" ]]; then
+      info "building flynn-host from source (bootstrap)"
 
-    info "getting nightly release version"
-    local dl_version="$(curl -fsSL "https://releases.flynn.io/api/channels" | jq -r '.[] | select(.name == "nightly") | .version')"
-    if [[ -z "${dl_version}" ]]; then
-      fail "unable to determine nightly release version"
+      # Extract TUF root keys from builder/manifest.json (compact JSON, no spaces)
+      local tuf_root_keys
+      tuf_root_keys="$(python3 -c "import json; m=json.load(open('${ROOT}/builder/manifest.json')); print(json.dumps(m['tuf']['root_keys'],separators=(',',':')))")"
+      if [[ -z "${tuf_root_keys}" ]]; then
+        fail "unable to extract TUF root keys from builder/manifest.json"
+      fi
+
+      local go_ldflags="-X github.com/flynn/flynn/pkg/version.version=${version}"
+      go_ldflags="${go_ldflags} -X github.com/flynn/flynn/pkg/tufconfig.Repository=${tuf_repo}"
+      go_ldflags="${go_ldflags} -X 'github.com/flynn/flynn/pkg/tufconfig.RootKeysJSON=${tuf_root_keys}'"
+
+      CGO_ENABLED=1 GO111MODULE=on go build -mod=vendor \
+        -ldflags "${go_ldflags}" \
+        -o "${flynn_host}" ./host
+      chmod +x "${flynn_host}"
+
+      info "building flynn-init from source"
+      GO111MODULE=on go build -mod=vendor \
+        -o "${ROOT}/build/bin/flynn-init" ./host/flynn-init
+      chmod +x "${ROOT}/build/bin/flynn-init"
+
+      info "flynn-host bootstrap build complete"
+    else
+      info "using existing flynn-host at ${flynn_host}"
     fi
 
-    info "downloading binaries + images (${dl_version})"
-    mkdir -p "${ROOT}/build/manifests"
-    sudo FLYNN_VERSION="${dl_version}" "${flynn_host}" download \
-      --tuf-db     "/tmp/tuf.db" \
-      --bin-dir    "${ROOT}/build/bin" \
-      --config-dir "${ROOT}/build/manifests" \
-      --volpath    "/var/lib/flynn/volumes-0"
+    # Use FLYNN_VERSION env var or default to "dev" — no longer queries
+    # the now-offline releases.flynn.io channel API
+    local dl_version="${FLYNN_VERSION:-"${version}"}"
 
-    mkdir -p "${ROOT}/build/image"
-    jq '.builder' "${ROOT}/build/manifests/images.${dl_version}.json" > "${builder_image}"
+    if $skip_download; then
+      info "skipping TUF download (--skip-download), using locally built binaries only"
+    else
+      # kill existing cluster to unlock the volume database
+      "${ROOT}/script/kill-flynn"
+
+      info "downloading binaries + images (${dl_version}) from ${tuf_repo}"
+      mkdir -p "${ROOT}/build/manifests"
+      sudo FLYNN_VERSION="${dl_version}" "${flynn_host}" download \
+        --repository "${tuf_repo}" \
+        --tuf-db     "/tmp/tuf.db" \
+        --bin-dir    "${ROOT}/build/bin" \
+        --config-dir "${ROOT}/build/manifests" \
+        --volpath    "/var/lib/flynn/volumes-0"
+
+      mkdir -p "${ROOT}/build/image"
+      jq '.builder' "${ROOT}/build/manifests/images.${dl_version}.json" > "${builder_image}"
+    fi
   fi
 
   # bootstrap the cluster if not running
@@ -120,7 +155,7 @@ main() {
   args+=("--tuf-db=/tmp/tuf.db")
 
   sudo mkdir -p "/var/lib/flynn/layer-cache"
-  "${flynn_host}" run \
+  sudo "${flynn_host}" run \
     --host    "${host}" \
     --bind    "${ROOT}:/src,/var/lib/flynn/layer-cache:/var/lib/flynn/layer-cache" \
     --limits  "temp_disk=4G,memory=4G" \

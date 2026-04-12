@@ -298,7 +298,7 @@ func newTUFClient(config *TUFConfig, dbPath string) (*tuf.Client, error) {
 		return client, nil
 	}
 	if err == tuf.ErrNoRootKeys {
-		if err := client.Init(config.RootKeys, len(config.RootKeys)); err != nil {
+		if err := client.Init(config.RootKeys, 1); err != nil {
 			return nil, err
 		}
 		_, err = client.Update()
@@ -1052,7 +1052,8 @@ type fileInput struct {
 // inputs and computing the SHA512/256 sum of the resulting bytes.
 //
 // TODO: consider storing a map of filenames to hashes and cache based
-//       on the last modified time to avoid unnecessary work.
+//
+//	on the last modified time to avoid unnecessary work.
 func (b *Builder) generateLayerID(name string, run []string, env map[string]string, artifact *ct.Artifact, inputs ...string) (id string, err error) {
 	start := time.Now()
 	defer func() {
