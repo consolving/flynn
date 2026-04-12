@@ -6,3 +6,5 @@ demo/*.log
 *.test
 /tmp
 /build
+._*
+*.backup

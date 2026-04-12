@@ -32,7 +32,7 @@ func init() {
 usage: flynn-host update [options]
 
 Options:
-  -r --repository=<uri>    image repository URI [default: https://dl.flynn.io/tuf]
+  -r --repository=<uri>    image repository URI [default: https://consolving.github.io/flynn-tuf-repo/repository]
   -t --tuf-db=<path>       local TUF file [default: /etc/flynn/tuf.db]
   -b --bin-dir=<dir>       directory to download binaries to [default: /usr/local/bin]
   -c --config-dir=<dir>    directory to download config files to [default: /etc/flynn]

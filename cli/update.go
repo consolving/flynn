@@ -133,7 +133,7 @@ func (u *Updater) updateTUFClient(client *tuf.Client) error {
 		return nil
 	}
 	if err == tuf.ErrNoRootKeys {
-		if err := client.Init(tufconfig.RootKeys, len(tufconfig.RootKeys)); err != nil {
+		if err := client.Init(tufconfig.RootKeys, 1); err != nil {
 			return err
 		}
 		return u.updateTUFClient(client)

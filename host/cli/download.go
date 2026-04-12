@@ -29,7 +29,7 @@ func init() {
 usage: flynn-host download [--repository=<uri>] [--tuf-db=<path>] [--config-dir=<dir>] [--bin-dir=<dir>] [--volpath=<path>]
 
 Options:
-  -r --repository=<uri>    TUF repository URI [default: https://dl.flynn.io/tuf]
+  -r --repository=<uri>    TUF repository URI [default: https://consolving.github.io/flynn-tuf-repo/repository]
   -t --tuf-db=<path>       local TUF file [default: /etc/flynn/tuf.db]
   -c --config-dir=<dir>    config directory [default: /etc/flynn]
   -b --bin-dir=<dir>       binary directory [default: /usr/local/bin]
@@ -149,7 +149,7 @@ func updateTUFClient(client *tuf.Client) error {
 		return nil
 	}
 	if err == tuf.ErrNoRootKeys {
-		if err := client.Init(tufconfig.RootKeys, len(tufconfig.RootKeys)); err != nil {
+		if err := client.Init(tufconfig.RootKeys, 1); err != nil {
 			return err
 		}
 		return updateTUFClient(client)

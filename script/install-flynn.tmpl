@@ -26,7 +26,7 @@ OPTIONS:
 
   --no-ntp                         Don't install ntp package
 
-  -r, --repo URL                   The TUF repository to download files from [default: https://dl.flynn.io]
+  -r, --repo URL                   The TUF repository to download files from [default: https://consolving.github.io/flynn-tuf-repo/repository]
 
   --zpool-create-device DEVICE     Device to create the flynn-default zpool on
 
@@ -146,7 +146,7 @@ main() {
     exit
   fi
 
-  repo_url="${repo_url:="https://dl.flynn.io"}"
+  repo_url="${repo_url:="https://consolving.github.io/flynn-tuf-repo/repository"}"
 
   local packages=("iptables" "zfsutils-linux")
 

@@ -1,0 +1,53 @@
+# Dockerfile.ci — Reproducible build environment for Flynn CI
+#
+# This image provides Go 1.13.15 with CGO support and all system dependencies
+# needed to build all Flynn components and run unit tests.
+#
+# Usage:
+#   docker build -f Dockerfile.ci -t flynn-ci .
+#   docker run --rm -v $(pwd):/go/src/github.com/flynn/flynn -w /go/src/github.com/flynn/flynn flynn-ci script/bootstrap-build --version dev
+#
+# For unit tests:
+#   docker run --rm -v $(pwd):/go/src/github.com/flynn/flynn -w /go/src/github.com/flynn/flynn flynn-ci make test-unit-standalone
+
+FROM debian:buster-slim
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies:
+# - build-essential, gcc: CGO compilation (required for flynn-host / libcontainer)
+# - libseccomp-dev: seccomp support for container runtime
+# - git: version detection, go module operations
+# - python3: TUF root key extraction from builder/manifest.json
+# - squashfs-tools: mksquashfs for building image layers (export-tuf)
+# - debootstrap: building Ubuntu base layers (export-tuf)
+# - busybox-static: building busybox base layer (export-tuf)
+# - curl, ca-certificates: downloading Go toolchain
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    libseccomp-dev \
+    git \
+    python3 \
+    squashfs-tools \
+    debootstrap \
+    busybox-static \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go 1.13.15 (the required version for this project)
+ENV GO_VERSION=1.13.15
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+    | tar -C /usr/local -xz
+
+ENV GOROOT=/usr/local/go
+ENV GOPATH=/go
+ENV PATH="${GOPATH}/bin:${GOROOT}/bin:${PATH}"
+
+# Set the working directory to the Flynn source tree
+WORKDIR /go/src/github.com/flynn/flynn
+
+# Default: show Go version to verify setup
+CMD ["go", "version"]
