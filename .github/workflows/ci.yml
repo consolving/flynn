@@ -11,9 +11,10 @@ name: CI
 
 on:
   push:
-    branches: [tuf-rebuild, master]
+    branches: [tuf-rebuild, master, go-1.22-upgrade]
   pull_request:
     branches: [tuf-rebuild, master]
+  workflow_dispatch:
 
 jobs:
   build:
