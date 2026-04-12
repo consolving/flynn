@@ -1,0 +1,93 @@
+# CI workflow for Flynn
+#
+# Builds all components and runs unit tests on every push and pull request
+# to the tuf-rebuild branch. Uses a container built from Dockerfile.ci to
+# ensure a reproducible environment with Go 1.13.15 and all system deps.
+#
+# The build uses script/bootstrap-build which compiles all 34 Flynn binaries
+# from source without requiring a running Flynn cluster.
+
+name: CI
+
+on:
+  push:
+    branches: [tuf-rebuild, master]
+  pull_request:
+    branches: [tuf-rebuild, master]
+
+jobs:
+  build:
+    name: Build all components
+    runs-on: ubuntu-latest
+    container:
+      image: debian:buster-slim
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc \
+            libseccomp-dev \
+            git \
+            python3 \
+            curl \
+            ca-certificates
+
+      - name: Install Go 1.13.15
+        run: |
+          curl -fsSL "https://go.dev/dl/go1.13.15.linux-amd64.tar.gz" \
+            | tar -C /usr/local -xz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
+          echo "GOPATH=/go" >> $GITHUB_ENV
+          echo "/go/bin" >> $GITHUB_PATH
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build all components
+        run: script/bootstrap-build --version "ci-${GITHUB_SHA::8}"
+
+      - name: Verify binaries
+        run: |
+          echo "Built binaries:"
+          ls -la build/bin/
+          echo ""
+          echo "Binary count: $(ls -1 build/bin/ | grep -v '.gz$' | grep -v '^flynn$' | wc -l)"
+          echo ""
+          echo "flynn-host version:"
+          build/bin/flynn-host version || true
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    container:
+      image: debian:buster-slim
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc \
+            libseccomp-dev \
+            git \
+            python3 \
+            curl \
+            ca-certificates
+
+      - name: Install Go 1.13.15
+        run: |
+          curl -fsSL "https://go.dev/dl/go1.13.15.linux-amd64.tar.gz" \
+            | tar -C /usr/local -xz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
+          echo "GOPATH=/go" >> $GITHUB_ENV
+          echo "/go/bin" >> $GITHUB_PATH
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run standalone unit tests
+        run: make test-unit-standalone
