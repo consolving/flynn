@@ -16,9 +16,9 @@ import (
 	"github.com/flynn/flynn/host/volume"
 	"github.com/flynn/flynn/pkg/attempt"
 	"github.com/flynn/flynn/pkg/random"
+	"github.com/inconshreveable/log15"
 	zfs "github.com/mistifyio/go-zfs"
 	"github.com/rancher/sparse-tools/sparse"
-	"github.com/inconshreveable/log15"
 )
 
 // blockSize is the block size used when creating new zvols
@@ -41,11 +41,11 @@ type Provider struct {
 }
 
 /*
-	Describes zfs config used at provider setup time.
+Describes zfs config used at provider setup time.
 
-	`volume.ProviderSpec.Config` is deserialized to this for zfs.
+`volume.ProviderSpec.Config` is deserialized to this for zfs.
 
-	Also is the output of `MarshalGlobalState`.
+Also is the output of `MarshalGlobalState`.
 */
 type ProviderConfig struct {
 	// DatasetName specifies the zfs dataset this provider will create volumes under.
@@ -63,12 +63,12 @@ type ProviderConfig struct {
 }
 
 /*
-	Describes parameters for creating a zpool.
+Describes parameters for creating a zpool.
 
-	Currently this only supports file-type vdevs; be aware that these are
-	convenient, but may have limited performance.  Advanced users should
-	consider configuring a zpool using block devices directly, and specifying
-	use of datasets in those zpools those rather than this fallback mechanism.
+Currently this only supports file-type vdevs; be aware that these are
+convenient, but may have limited performance.  Advanced users should
+consider configuring a zpool using block devices directly, and specifying
+use of datasets in those zpools those rather than this fallback mechanism.
 */
 type MakeDev struct {
 	BackingFilename string `json:"filename"`
@@ -267,8 +267,22 @@ func (p *Provider) ImportFilesystem(fs *volume.Filesystem) (volume.Volume, error
 
 	if f, ok := fs.Data.(sparse.FileIoProcessor); ok {
 		if err := p.copySparse(dev, f); err != nil {
-			p.destroy(v)
-			return nil, err
+			// FIEMAP may not be supported on all filesystems (e.g. tmpfs).
+			// Fall back to sequential copy if sparse copy fails.
+			log15.Warn("sparse copy failed, falling back to sequential copy", "err", err)
+			if _, seekErr := dev.Seek(0, io.SeekStart); seekErr != nil {
+				p.destroy(v)
+				return nil, fmt.Errorf("error seeking zvol after sparse copy failure: %s", seekErr)
+			}
+			srcFile := f.GetFile()
+			if _, seekErr := srcFile.Seek(0, io.SeekStart); seekErr != nil {
+				p.destroy(v)
+				return nil, fmt.Errorf("error seeking source after sparse copy failure: %s", seekErr)
+			}
+			if _, err := io.Copy(dev, srcFile); err != nil {
+				p.destroy(v)
+				return nil, err
+			}
 		}
 	} else {
 		n, err := io.Copy(dev, fs.Data)
@@ -484,7 +498,7 @@ type zfsHaves struct {
 }
 
 /*
-	Returns the set of snapshot UIDs available in this volume's backing dataset.
+Returns the set of snapshot UIDs available in this volume's backing dataset.
 */
 func (p *Provider) ListHaves(vol volume.Volume) ([]json.RawMessage, error) {
 	zvol, err := p.owns(vol)
@@ -553,24 +567,24 @@ func (p *Provider) SendSnapshot(vol volume.Volume, haves []json.RawMessage, outp
 }
 
 /*
-	ReceiveSnapshot both accepts a snapshotted filesystem as a byte stream,
-	and applies that state to the given `vol` (i.e., if this were git, it's like
-	`git fetch && git pull` at the same time; regretably, it's pretty hard to get
-	zfs to separate those operations).  If there are local working changes in
-	the volume, they will be overwritten.
+ReceiveSnapshot both accepts a snapshotted filesystem as a byte stream,
+and applies that state to the given `vol` (i.e., if this were git, it's like
+`git fetch && git pull` at the same time; regretably, it's pretty hard to get
+zfs to separate those operations).  If there are local working changes in
+the volume, they will be overwritten.
 
-	In addition to the given volume being mutated on disk, a reference to the
-	new snapshot will be returned (this can be used for cleanup, though be aware
-	that with zfs, removing snapshots may impact the ability to use incremental
-	deltas when receiving future snapshots).
+In addition to the given volume being mutated on disk, a reference to the
+new snapshot will be returned (this can be used for cleanup, though be aware
+that with zfs, removing snapshots may impact the ability to use incremental
+deltas when receiving future snapshots).
 
-	Also note that ZFS is *extremely* picky about receiving snapshots; in
-	addition to obvious failure modes like an incremental snapshot with
-	insufficient data, the following complications apply:
-	- Sending an incremental snapshot with too much history will fail.
-	- Sending a full snapshot to a volume with any other snapshots will fail.
-	In the former case, you can renegociate; in the latter, you will have to
-	either *destroy snapshots* or make a new volume.
+Also note that ZFS is *extremely* picky about receiving snapshots; in
+addition to obvious failure modes like an incremental snapshot with
+insufficient data, the following complications apply:
+- Sending an incremental snapshot with too much history will fail.
+- Sending a full snapshot to a volume with any other snapshots will fail.
+In the former case, you can renegociate; in the latter, you will have to
+either *destroy snapshots* or make a new volume.
 */
 func (p *Provider) ReceiveSnapshot(vol volume.Volume, input io.Reader) (volume.Volume, error) {
 	zvol, err := p.owns(vol)

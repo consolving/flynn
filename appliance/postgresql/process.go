@@ -424,10 +424,43 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 		return err
 	}
 
+	// Pre-install commonly needed extensions in template1 so they are
+	// inherited by all databases created via CREATE DATABASE.  This is
+	// required because application database users are not superusers
+	// and cannot run CREATE EXTENSION themselves (pgextwlist is not
+	// available in the current packages layer).
+	if extErr := p.installExtensionsInTemplate(); extErr != nil {
+		log.Error("error installing extensions in template1", "err", extErr)
+		return extErr
+	}
+
 	if downstream != nil {
 		p.waitForSync(downstream, true)
 	}
 
+	return nil
+}
+
+// installExtensionsInTemplate pre-installs commonly needed PostgreSQL
+// extensions in template1 so they are inherited by all databases
+// created via CREATE DATABASE.
+func (p *Process) installExtensionsInTemplate() error {
+	port, _ := strconv.Atoi(p.port)
+	templateDB, err := pgx.Connect(pgx.ConnConfig{
+		Host:     "127.0.0.1",
+		User:     "postgres",
+		Port:     uint16(port),
+		Database: "template1",
+	})
+	if err != nil {
+		return fmt.Errorf("connecting to template1: %s", err)
+	}
+	defer templateDB.Close()
+	for _, ext := range []string{"uuid-ossp", "pgcrypto"} {
+		if _, err := templateDB.Exec(fmt.Sprintf(`CREATE EXTENSION IF NOT EXISTS "%s"`, ext)); err != nil {
+			return fmt.Errorf("creating extension %s in template1: %s", ext, err)
+		}
+	}
 	return nil
 }
 
