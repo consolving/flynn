@@ -253,10 +253,19 @@ func main() {
 		shutdown.Fatal(listenErr{apiAddr, err})
 	}
 
-	httpAddr := net.JoinHostPort(os.Getenv("LISTEN_IP"), strconv.Itoa(httpPorts[0]))
+	// Use EXTERNAL_IP for discoverd registration so other services can reach
+	// this router instance. LISTEN_IP (typically 0.0.0.0) is for binding only
+	// and is not a routable address. If EXTERNAL_IP is not set, fall back to
+	// LISTEN_IP for backward compatibility (single-node/loopback setups).
+	regIP := os.Getenv("EXTERNAL_IP")
+	if regIP == "" {
+		regIP = os.Getenv("LISTEN_IP")
+	}
+	apiRegAddr := net.JoinHostPort(regIP, *apiPort)
+	httpRegAddr := net.JoinHostPort(regIP, strconv.Itoa(httpPorts[0]))
 	services := map[string]string{
-		"router-api":  apiAddr,
-		"router-http": httpAddr,
+		"router-api":  apiRegAddr,
+		"router-http": httpRegAddr,
 	}
 	for service, addr := range services {
 		log.Info("registering service", "name", service, "addr", addr)
