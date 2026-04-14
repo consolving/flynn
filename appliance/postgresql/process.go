@@ -456,6 +456,14 @@ func (p *Process) installExtensionsInTemplate() error {
 		return fmt.Errorf("connecting to template1: %s", err)
 	}
 	defer templateDB.Close()
+
+	// When the primary has a downstream sync replica, postgresql.conf sets
+	// default_transaction_read_only = on.  We need to override that for
+	// this session so that CREATE EXTENSION can perform writes.
+	if _, err := templateDB.Exec("SET default_transaction_read_only = off"); err != nil {
+		return fmt.Errorf("setting read-write mode on template1 connection: %s", err)
+	}
+
 	for _, ext := range []string{"uuid-ossp", "pgcrypto"} {
 		if _, err := templateDB.Exec(fmt.Sprintf(`CREATE EXTENSION IF NOT EXISTS "%s"`, ext)); err != nil {
 			return fmt.Errorf("creating extension %s in template1: %s", ext, err)

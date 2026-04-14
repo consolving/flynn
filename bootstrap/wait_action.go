@@ -11,9 +11,10 @@ import (
 )
 
 type WaitAction struct {
-	URL    string `json:"url"`
-	Host   string `json:"host"`
-	Status int    `json:"status"`
+	URL     string `json:"url"`
+	Host    string `json:"host"`
+	Status  int    `json:"status"`
+	Timeout int    `json:"timeout"` // seconds, 0 = use default (10 minutes)
 }
 
 func init() {
@@ -21,8 +22,13 @@ func init() {
 }
 
 func (a *WaitAction) Run(s *State) error {
-	const waitMax = 5 * time.Minute
+	const defaultWaitMax = 10 * time.Minute
 	const waitInterval = 500 * time.Millisecond
+
+	waitMax := defaultWaitMax
+	if a.Timeout > 0 {
+		waitMax = time.Duration(a.Timeout) * time.Second
+	}
 
 	if a.Status == 0 {
 		a.Status = 200

@@ -26,7 +26,7 @@ func (a *SireniaWaitAction) Run(s *State) error {
 	var leader *discoverd.Instance
 	err = attempt.Strategy{
 		Min:   5,
-		Total: 5 * time.Minute,
+		Total: 10 * time.Minute,
 		Delay: 500 * time.Millisecond,
 	}.Run(func() error {
 		leader, err = d.Service(a.Service).Leader()
@@ -37,5 +37,5 @@ func (a *SireniaWaitAction) Run(s *State) error {
 	}
 
 	// connect using sirenia client and wait until database reports read/write
-	return client.NewClient(leader.Addr).WaitForReadWrite(5 * time.Minute)
+	return client.NewClient(leader.Addr).WaitForReadWrite(10 * time.Minute)
 }

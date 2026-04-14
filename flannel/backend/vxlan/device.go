@@ -40,6 +40,20 @@ func newVXLANDevice(devAttrs *vxlanDeviceAttrs) (*vxlanDevice, error) {
 		return nil, err
 	}
 
+	// Generate a unique MAC address derived from the VTEP IP to ensure
+	// each node's flannel.1 device has a distinct hardware address.
+	// Without this, nodes cloned from the same image get identical MACs
+	// which breaks VXLAN forwarding.
+	if ip4 := devAttrs.vtepAddr.To4(); ip4 != nil {
+		mac := net.HardwareAddr{0x02, 0x42, ip4[0], ip4[1], ip4[2], ip4[3]}
+		if err := netlink.LinkSetHardwareAddr(link, mac); err != nil {
+			log.Warningf("failed to set unique MAC on %s: %v", link.Name, err)
+		} else {
+			link.HardwareAddr = mac
+			log.Infof("set VXLAN device %s MAC to %s (derived from VTEP IP %s)", link.Name, mac, devAttrs.vtepAddr)
+		}
+	}
+
 	return &vxlanDevice{
 		link: link,
 	}, nil
