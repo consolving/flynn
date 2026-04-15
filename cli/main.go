@@ -134,7 +134,7 @@ See 'flynn help <command>' for more information on a specific command.
 		return
 	}
 
-	fmt.Fprintln(os.Stderr, "WARNING: Flynn is unmaintained and new installs will fail on June 1. See: https://github.com/flynn/flynn")
+	// Original unmaintained warning removed — this project is actively maintained.
 }
 
 type command struct {
