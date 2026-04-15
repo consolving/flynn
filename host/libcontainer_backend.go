@@ -265,12 +265,23 @@ func (l *LibcontainerBackend) ConfigureNetworking(config *host.NetworkConfig) er
 		return err
 	}
 
-	// Read DNS config, discoverd uses the nameservers
+	// Read DNS config, discoverd uses the nameservers as upstream recursors.
+	// On systems with systemd-resolved, /etc/resolv.conf points to the stub
+	// resolver at 127.0.0.53 which is only reachable from the host's network
+	// namespace. Discoverd runs in a container and needs the real upstream
+	// resolvers, which systemd-resolved exposes at /run/systemd/resolve/resolv.conf.
 	dnsConf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
 		return err
 	}
 	config.Resolvers = dnsConf.Servers
+	if isLoopbackResolvers(config.Resolvers) {
+		if altConf, err := dns.ClientConfigFromFile("/run/systemd/resolve/resolv.conf"); err == nil {
+			if !isLoopbackResolvers(altConf.Servers) {
+				config.Resolvers = altConf.Servers
+			}
+		}
+	}
 
 	// Write a resolv.conf to be bind-mounted into containers pointing at the
 	// future discoverd DNS listener
@@ -1047,16 +1058,16 @@ func (c *Container) watch(ready chan<- error, buffer host.LogBuffer) error {
 
 	notifyOOM, err := c.container.NotifyOOM()
 	if err != nil {
-		log.Error("error subscribing to OOM notifications", "err", err)
-		return err
+		log.Warn("error subscribing to OOM notifications (non-fatal)", "err", err)
+	} else {
+		go func() {
+			logger := c.l.LogMux.Logger(logagg.MsgIDInit, c.MuxConfig, "component", "flynn-host")
+			defer logger.Close()
+			for range notifyOOM {
+				logger.Crit("FATAL: a container process was killed due to lack of available memory")
+			}
+		}()
 	}
-	go func() {
-		logger := c.l.LogMux.Logger(logagg.MsgIDInit, c.MuxConfig, "component", "flynn-host")
-		defer logger.Close()
-		for range notifyOOM {
-			logger.Crit("FATAL: a container process was killed due to lack of available memory")
-		}
-	}()
 
 	log.Info("watching for changes")
 	for change := range c.Client.StreamState() {
@@ -1814,6 +1825,23 @@ func createTmpfs(size int64) (*Tmpfs, error) {
 	}
 
 	return &Tmpfs{Path: f.Name(), Size: size}, nil
+}
+
+// isLoopbackResolvers returns true if all DNS servers in the list are
+// loopback addresses (127.x.x.x or ::1). This indicates the system is using
+// a local DNS stub (like systemd-resolved) that won't be reachable from
+// containers running in separate network namespaces.
+func isLoopbackResolvers(servers []string) bool {
+	if len(servers) == 0 {
+		return false
+	}
+	for _, s := range servers {
+		ip := net.ParseIP(s)
+		if ip == nil || !ip.IsLoopback() {
+			return false
+		}
+	}
+	return true
 }
 
 func forceMemoryOvercommit() error {
