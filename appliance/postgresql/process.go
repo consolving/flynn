@@ -372,7 +372,13 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 		return err
 	}
 
-	if err := p.writeConfig(configData{ReadOnly: downstream != nil}); err != nil {
+	// Start read-write during initial primary setup.  The database was
+	// just created with initdb so there is no user data to protect.  We
+	// need read-write access to create the superuser and install
+	// extensions.  Once the sync standby catches up, waitForSync will
+	// rewrite the config with the sync standby name (which also drops
+	// ReadOnly, making default_transaction_read_only = off permanent).
+	if err := p.writeConfig(configData{}); err != nil {
 		log.Error("error writing postgres.conf", "path", p.configPath(), "err", err)
 		return err
 	}
@@ -397,10 +403,6 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 	tx, err = p.db.Begin()
 	if err != nil {
 		log.Error("error acquiring connection", "err", err)
-		return err
-	}
-	if _, err := tx.Exec("SET TRANSACTION READ WRITE"); err != nil {
-		log.Error("error setting transaction read-write", "err", err)
 		return err
 	}
 	if _, err := tx.Exec(fmt.Sprintf(`
@@ -435,6 +437,18 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 	}
 
 	if downstream != nil {
+		// Now that setup is complete, switch to read-only mode to
+		// prevent user writes before the sync standby catches up.
+		// waitForSync will rewrite the config with the sync name
+		// (which drops ReadOnly) once replication is caught up.
+		if err := p.writeConfig(configData{ReadOnly: true}); err != nil {
+			log.Error("error writing read-only config", "err", err)
+			return err
+		}
+		if err := p.sighup(); err != nil {
+			log.Error("error reloading config for read-only mode", "err", err)
+			return err
+		}
 		p.waitForSync(downstream, true)
 	}
 
