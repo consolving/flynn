@@ -44,13 +44,37 @@ func newVXLANDevice(devAttrs *vxlanDeviceAttrs) (*vxlanDevice, error) {
 	// each node's flannel.1 device has a distinct hardware address.
 	// Without this, nodes cloned from the same image get identical MACs
 	// which breaks VXLAN forwarding.
+	//
+	// IMPORTANT: Only set the MAC if it differs from the current one.
+	// Setting the MAC (even to the same value) causes the kernel to
+	// flush all ARP neighbor entries on the interface, which breaks
+	// overlay connectivity when flannel instances crash-loop and
+	// repeatedly reuse the existing device.
 	if ip4 := devAttrs.vtepAddr.To4(); ip4 != nil {
 		mac := net.HardwareAddr{0x02, 0x42, ip4[0], ip4[1], ip4[2], ip4[3]}
-		if err := netlink.LinkSetHardwareAddr(link, mac); err != nil {
-			log.Warningf("failed to set unique MAC on %s: %v", link.Name, err)
+		currentMAC := link.HardwareAddr
+		if !macEqual(currentMAC, mac) {
+			if err := netlink.LinkSetHardwareAddr(link, mac); err != nil {
+				// If setting MAC while UP fails, try bringing the link down first
+				log.Warningf("failed to set MAC on %s while UP: %v; retrying with link down", link.Name, err)
+				if err2 := netlink.LinkSetDown(link); err2 != nil {
+					log.Warningf("failed to bring %s down: %v", link.Name, err2)
+				}
+				if err2 := netlink.LinkSetHardwareAddr(link, mac); err2 != nil {
+					log.Errorf("failed to set unique MAC on %s even after link down: %v", link.Name, err2)
+				} else {
+					link.HardwareAddr = mac
+					log.Infof("set VXLAN device %s MAC to %s (after link down, derived from VTEP IP %s)", link.Name, mac, devAttrs.vtepAddr)
+				}
+				if err2 := netlink.LinkSetUp(link); err2 != nil {
+					log.Warningf("failed to bring %s back up: %v", link.Name, err2)
+				}
+			} else {
+				link.HardwareAddr = mac
+				log.Infof("set VXLAN device %s MAC to %s (derived from VTEP IP %s)", link.Name, mac, devAttrs.vtepAddr)
+			}
 		} else {
-			link.HardwareAddr = mac
-			log.Infof("set VXLAN device %s MAC to %s (derived from VTEP IP %s)", link.Name, mac, devAttrs.vtepAddr)
+			log.Infof("VXLAN device %s already has correct MAC %s, skipping set", link.Name, mac)
 		}
 	}
 
@@ -70,6 +94,7 @@ func ensureLink(vxlan *netlink.Vxlan) (*netlink.Vxlan, error) {
 
 		incompat := vxlanLinksIncompat(vxlan, existing)
 		if incompat == "" {
+			log.Infof("reusing existing %q device", vxlan.Name)
 			return existing.(*netlink.Vxlan), nil
 		}
 
@@ -127,6 +152,19 @@ func (dev *vxlanDevice) Destroy() {
 	netlink.LinkDel(dev.link)
 }
 
+// macEqual compares two hardware addresses for equality.
+func macEqual(a, b net.HardwareAddr) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (dev *vxlanDevice) MACAddr() net.HardwareAddr {
 	return dev.link.HardwareAddr
 }
@@ -141,8 +179,8 @@ type neigh struct {
 }
 
 func (dev *vxlanDevice) AddL2(n neigh) error {
-	log.Infof("calling NeighAdd: %v, %v", n.IP, n.MAC)
-	return netlink.NeighAdd(&netlink.Neigh{
+	log.Infof("calling NeighSet (L2/FDB): %v, %v", n.IP, n.MAC)
+	return netlink.NeighSet(&netlink.Neigh{
 		LinkIndex:    dev.link.Index,
 		State:        netlink.NUD_PERMANENT,
 		Family:       syscall.AF_BRIDGE,
