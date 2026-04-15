@@ -51,9 +51,12 @@ func main() {
 		}
 	}
 
-	if err = setupGitreceive(); err != nil {
-		log.Println(err)
-		return
+	// Only setup gitreceive if we're running git-related tests or all tests
+	if args.Run == "" || regexp.MustCompile(`(?i)(git|GitDeploy|GitreceiveSuite|TaffyDeploy)`).MatchString(args.Run) {
+		if err = setupGitreceive(); err != nil {
+			log.Println(err)
+			return
+		}
 	}
 
 	res = check.RunAll(&check.RunConf{

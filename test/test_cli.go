@@ -942,14 +942,20 @@ func (s *CLISuite) TestRunLimits(t *c.C) {
 	limits := strings.Split(strings.TrimSpace(cmd.Output), "\n")
 	t.Assert(limits, c.HasLen, 3)
 	t.Assert(limits[0], c.Equals, strconv.FormatInt(*defaults[resource.TypeMemory].Limit, 10))
-	t.Assert(limits[1], c.Equals, strconv.FormatInt(1024, 10))
+	// On cgroups v2, cpu.weight is used instead of cpu.shares.
+	// Default 1000 milliCPU -> 1024 shares (v1) or cpuSharesToWeight(1024) weight (v2).
+	expectedCPU := int64(1024)
+	if isCgroupV2() {
+		expectedCPU = cpuSharesToWeight(1024)
+	}
+	t.Assert(limits[1], c.Equals, strconv.FormatInt(expectedCPU, 10))
 	t.Assert(limits[2], c.Equals, strconv.FormatInt(*defaults[resource.TypeMaxFD].Limit, 10))
 	cmd = app.flynn("run", "--limits", "memory=200MB,max_fd=9000", "sh", "-c", resourceCmd)
 	t.Assert(cmd, Succeeds)
 	limits = strings.Split(strings.TrimSpace(cmd.Output), "\n")
 	t.Assert(limits, c.HasLen, 3)
 	t.Assert(limits[0], c.Equals, strconv.FormatInt(200*units.MiB, 10))
-	t.Assert(limits[1], c.Equals, strconv.FormatInt(1024, 10))
+	t.Assert(limits[1], c.Equals, strconv.FormatInt(expectedCPU, 10))
 	t.Assert(limits[2], c.Equals, strconv.FormatInt(9000, 10))
 }
 

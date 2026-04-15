@@ -212,9 +212,10 @@ func (s *ControllerSuite) TestResourceLimitsOneOffJob(t *c.C) {
 	app, release := s.createApp(t)
 
 	rwc, err := s.controllerClient(t).RunJobAttached(app.ID, &ct.NewJob{
-		ReleaseID: release.ID,
-		Args:      []string{"sh", "-c", resourceCmd},
-		Resources: testResources(),
+		ReleaseID:  release.ID,
+		Args:       []string{"sh", "-c", resourceCmd},
+		Resources:  testResources(),
+		DisableLog: true,
 	})
 	t.Assert(err, c.IsNil)
 	attachClient := cluster.NewAttachClient(rwc)

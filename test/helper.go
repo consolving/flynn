@@ -357,8 +357,32 @@ func (h *hostnames) Remove(t *c.C, ip string) {
 const (
 	resourceMem   int64 = 256 * units.MiB
 	resourceMaxFD int64 = 1024
-	resourceCmd         = "cat /sys/fs/cgroup/memory/memory.limit_in_bytes; cat /sys/fs/cgroup/cpu/cpu.shares; ulimit -n"
+	// resourceCmd auto-detects cgroups v1 vs v2 and reads the memory limit,
+	// CPU weight/shares, and max file descriptors from inside the container.
+	// On v1: reads /sys/fs/cgroup/memory/memory.limit_in_bytes and /sys/fs/cgroup/cpu/cpu.shares
+	// On v2: reads memory.max and cpu.weight from the container's own cgroup
+	//   (discovered via /proc/1/cgroup, e.g. /sys/fs/cgroup/flynn/system/<id>/)
+	resourceCmd = "if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then cat /sys/fs/cgroup/memory/memory.limit_in_bytes; cat /sys/fs/cgroup/cpu/cpu.shares; else CG=/sys/fs/cgroup$(cat /proc/1/cgroup | head -1 | cut -d: -f3); cat $CG/memory.max; cat $CG/cpu.weight; fi; ulimit -n"
 )
+
+// cpuSharesToWeight converts cgroups v1 cpu.shares (2-262144, default 1024)
+// to cgroups v2 cpu.weight (1-10000, default 100).
+// This must match the conversion in host/libcontainer_backend.go.
+func cpuSharesToWeight(shares int64) int64 {
+	if shares < 2 {
+		shares = 2
+	}
+	if shares > 262144 {
+		shares = 262144
+	}
+	return 1 + ((shares-2)*9999)/262142
+}
+
+// isCgroupV2 returns true if the system uses cgroups v2 (unified hierarchy).
+func isCgroupV2() bool {
+	_, err := os.Stat("/sys/fs/cgroup/cgroup.controllers")
+	return err == nil
+}
 
 func testResources() resource.Resources {
 	r := resource.Resources{
@@ -374,7 +398,13 @@ func assertResourceLimits(t *c.C, out string) {
 	limits := strings.Split(strings.TrimSpace(out), "\n")
 	t.Assert(limits, c.HasLen, 3)
 	t.Assert(limits[0], c.Equals, strconv.FormatInt(resourceMem, 10))
-	t.Assert(limits[1], c.Equals, strconv.FormatInt(768, 10))
+	// On cgroups v2, cpu.weight is used instead of cpu.shares.
+	// 750 milliCPU -> 768 shares (v1) or cpuSharesToWeight(768) weight (v2).
+	expectedCPU := int64(768)
+	if isCgroupV2() {
+		expectedCPU = cpuSharesToWeight(768)
+	}
+	t.Assert(limits[1], c.Equals, strconv.FormatInt(expectedCPU, 10))
 	t.Assert(limits[2], c.Equals, strconv.FormatInt(resourceMaxFD, 10))
 }
 

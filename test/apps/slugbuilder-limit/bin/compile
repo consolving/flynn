@@ -2,4 +2,9 @@
 
 set -e
 
-cat /sys/fs/cgroup/memory/memory.limit_in_bytes
+if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+	cat /sys/fs/cgroup/memory/memory.limit_in_bytes
+else
+	CG=/sys/fs/cgroup$(cat /proc/1/cgroup | head -1 | cut -d: -f3)
+	cat "$CG/memory.max"
+fi

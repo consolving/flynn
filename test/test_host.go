@@ -220,10 +220,10 @@ func (a *IshApp) Cleanup() {
 }
 
 /*
-	Make an 'ish' application on the given host, returning it when
-	it has registered readiness with discoverd.
+Make an 'ish' application on the given host, returning it when
+it has registered readiness with discoverd.
 
-	User will want to defer a.Cleanup() to clean up.
+User will want to defer a.Cleanup() to clean up.
 */
 func (s *Helper) makeIshApp(t *c.C, a *IshApp) (*IshApp, error) {
 	// pick a unique string to use as service name so this works with concurrent tests.
@@ -430,7 +430,7 @@ func (s *HostSuite) TestResourceLimits(t *c.C) {
 		s.clusterClient(t),
 		s.createArtifact(t, "test-apps"),
 		&host.Job{
-			Config:    host.ContainerConfig{Args: []string{"sh", "-c", resourceCmd}},
+			Config:    host.ContainerConfig{Args: []string{"sh", "-c", resourceCmd}, DisableLog: true},
 			Resources: testResources(),
 		},
 	)
