@@ -284,20 +284,20 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 	return nil
 }
 
-// Backup returns a reader for streaming a backup in xbstream format.
+// Backup returns a reader for streaming a backup in mbstream format.
 func (p *Process) Backup() (io.ReadCloser, error) {
 	r := &backupReadCloser{}
 
 	cmd := exec.Command(
-		filepath.Join(p.BinDir, "innobackupex"),
+		filepath.Join(p.BinDir, "mariabackup"),
 		"--defaults-file="+p.ConfigPath(),
+		"--backup",
 		"--host=127.0.0.1",
 		"--port="+p.Port,
 		"--user=flynn",
 		"--password="+p.Password,
 		"--socket=",
-		"--stream=xbstream",
-		".",
+		"--stream=mbstream",
 	)
 	cmd.Dir = p.DataDir
 	cmd.Stderr = &r.stderr
@@ -336,7 +336,7 @@ func (p *Process) extractBackupInfo() (*BackupInfo, error) {
 	return &BackupInfo{LogFile: fields[0], LogPos: fields[1], GTID: fields[2]}, nil
 }
 
-// Restore restores the database from an xbstream backup.
+// Restore restores the database from an mbstream backup.
 func (p *Process) Restore(r io.Reader) (*BackupInfo, error) {
 	if err := p.writeConfig(configData{}); err != nil {
 		return nil, err
@@ -355,11 +355,11 @@ func (p *Process) Restore(r io.Reader) (*BackupInfo, error) {
 }
 
 func (p *Process) unpackXbstream(r io.Reader) error {
-	cmd := exec.Command(filepath.Join(p.BinDir, "xbstream"), "-x", "--directory="+p.DataDir)
+	cmd := exec.Command(filepath.Join(p.BinDir, "mbstream"), "-x", "--directory="+p.DataDir)
 	cmd.Stdin = io.NopCloser(r)
 
 	if buf, err := cmd.CombinedOutput(); err != nil {
-		p.Logger.Error("xbstream failed", "err", err, "output", string(buf))
+		p.Logger.Error("mbstream failed", "err", err, "output", string(buf))
 		return err
 	}
 
@@ -368,13 +368,13 @@ func (p *Process) unpackXbstream(r io.Reader) error {
 
 func (p *Process) restoreApplyLog() error {
 	cmd := exec.Command(
-		filepath.Join(p.BinDir, "innobackupex"),
+		filepath.Join(p.BinDir, "mariabackup"),
 		"--defaults-file="+p.ConfigPath(),
-		"--apply-log",
-		p.DataDir,
+		"--prepare",
+		"--target-dir="+p.DataDir,
 	)
 	if buf, err := cmd.CombinedOutput(); err != nil {
-		p.Logger.Error("innobackupex apply-log failed", "err", err, "output", string(buf))
+		p.Logger.Error("mariabackup prepare failed", "err", err, "output", string(buf))
 		return err
 	}
 	return nil
@@ -990,7 +990,7 @@ func MySQLErrorNumber(err error) uint16 {
 	return 0
 }
 
-// backupReadCloser wraps the Cmd of the innobackupex to perform error handling.
+// backupReadCloser wraps the Cmd of mariabackup to perform error handling.
 type backupReadCloser struct {
 	cmd    *exec.Cmd
 	stdout io.ReadCloser
@@ -1005,10 +1005,10 @@ func (r *backupReadCloser) Close() error {
 		return err
 	}
 
-	// Verify that innobackupex prints "completed OK!" at the end of STDERR.
+	// Verify that mariabackup prints "completed OK!" at the end of STDERR.
 	if !strings.HasSuffix(strings.TrimSpace(r.stderr.String()), "completed OK!") {
 		r.stderr.WriteTo(os.Stderr)
-		return errors.New("innobackupex did not complete ok")
+		return errors.New("mariabackup did not complete ok")
 	}
 
 	return nil
