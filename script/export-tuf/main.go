@@ -38,11 +38,13 @@ import (
 // imageSpec defines a Flynn component image: what base layers it inherits,
 // what binaries and files it contains, and its entrypoint.
 type imageSpec struct {
-	Name       string
-	Base       string            // base image name for layer inheritance
-	Binaries   map[string]string // source binary name -> dest path in squashfs
-	ExtraFiles map[string]string // source file (relative to source-dir) -> dest path
-	Entrypoint *ct.ImageEntrypoint
+	Name          string
+	Base          string            // base image name for layer inheritance
+	Binaries      map[string]string // source binary name -> dest path in squashfs
+	ExtraFiles    map[string]string // source file (relative to source-dir) -> dest path
+	ExtraDirs     map[string]string // source dir (relative to source-dir) -> dest path
+	Entrypoint    *ct.ImageEntrypoint
+	PackageScript string // path relative to source-dir for package install script (run in chroot on base layer)
 }
 
 func main() {
@@ -54,12 +56,14 @@ func main() {
 
 func run() error {
 	var (
-		tufDir     string
-		buildDir   string
-		sourceDir  string
-		version    string
-		layerCache string
-		tufRepo    string
+		tufDir      string
+		buildDir    string
+		sourceDir   string
+		version     string
+		layerCache  string
+		tufRepo     string
+		skipBase    bool
+		pkgLayerDir string
 	)
 
 	// Parse flags manually (avoid adding dependencies)
@@ -76,6 +80,10 @@ func run() error {
 			layerCache = strings.TrimPrefix(arg, "--layer-cache=")
 		} else if strings.HasPrefix(arg, "--tuf-repo=") {
 			tufRepo = strings.TrimPrefix(arg, "--tuf-repo=")
+		} else if arg == "--skip-base-layers" {
+			skipBase = true
+		} else if strings.HasPrefix(arg, "--package-layer-dir=") {
+			pkgLayerDir = strings.TrimPrefix(arg, "--package-layer-dir=")
 		} else if arg == "--help" || arg == "-h" {
 			printUsage()
 			return nil
@@ -100,16 +108,19 @@ func run() error {
 	}
 
 	e := &exporter{
-		tufDir:      tufDir,
-		buildDir:    buildDir,
-		binDir:      binDir,
-		sourceDir:   sourceDir,
-		version:     version,
-		layerCache:  layerCache,
-		tufRepoURL:  tufRepo,
-		layerURLTpl: fmt.Sprintf("%s?target=/layers/{id}.squashfs", tufRepo),
-		baseLayers:  make(map[string][]*ct.ImageLayer),
-		artifacts:   make(map[string]*ct.Artifact),
+		tufDir:         tufDir,
+		buildDir:       buildDir,
+		binDir:         binDir,
+		sourceDir:      sourceDir,
+		version:        version,
+		layerCache:     layerCache,
+		tufRepoURL:     tufRepo,
+		layerURLTpl:    fmt.Sprintf("https://github.com/consolving/flynn-tuf-repo/releases/download/%s/{id}.squashfs", version),
+		skipBaseLayers: skipBase,
+		pkgLayerDir:    pkgLayerDir,
+		baseLayers:     make(map[string][]*ct.ImageLayer),
+		packageLayers:  make(map[string]*ct.ImageLayer),
+		artifacts:      make(map[string]*ct.Artifact),
 	}
 
 	return e.Run()
@@ -125,21 +136,26 @@ Options:
   --version=VERSION   Version string (e.g., v20250412.0)
   --layer-cache=DIR   Path to layer cache directory
   --tuf-repo=URL      TUF repository URL [default: https://consolving.github.io/flynn-tuf-repo/repository]
+  --skip-base-layers  Use cached base layers instead of building them
+  --package-layer-dir=DIR  Directory with pre-built {name}-packages.squashfs files
 `)
 }
 
 type exporter struct {
-	tufDir      string
-	buildDir    string
-	binDir      string
-	sourceDir   string
-	version     string
-	layerCache  string
-	tufRepoURL  string
-	layerURLTpl string
+	tufDir         string
+	buildDir       string
+	binDir         string
+	sourceDir      string
+	version        string
+	layerCache     string
+	tufRepoURL     string
+	layerURLTpl    string
+	skipBaseLayers bool
+	pkgLayerDir    string
 
-	baseLayers map[string][]*ct.ImageLayer // base image name -> accumulated layers
-	artifacts  map[string]*ct.Artifact     // image name -> artifact
+	baseLayers    map[string][]*ct.ImageLayer // base image name -> accumulated layers
+	packageLayers map[string]*ct.ImageLayer   // package script path -> cached layer
+	artifacts     map[string]*ct.Artifact     // image name -> artifact
 }
 
 func (e *exporter) Run() error {
@@ -184,35 +200,136 @@ func (e *exporter) Run() error {
 
 func (e *exporter) buildBaseLayers() error {
 	// Build the base OS layers in dependency order.
-	// Each base layer becomes a squashfs file in the layer cache.
-	//
-	// Dependency tree:
-	//   busybox (standalone)
-	//   ubuntu-noble (standalone)
-	//   ubuntu-noble (standalone, needed only for host image)
-
 	bases := []struct {
 		name   string
 		script string
 	}{
 		{"busybox", "builder/img/busybox.sh"},
 		{"ubuntu-noble", "builder/img/ubuntu-noble.sh"},
-		// ubuntu-noble needed for host image but host image also needs
-		// kernel packages which require a full apt - skip for now as
-		// the host image will use ubuntu-noble in the simplified pipeline
 	}
 
 	for _, base := range bases {
-		fmt.Printf("  Building base layer: %s\n", base.name)
-		layer, err := e.buildBaseLayer(base.name, base.script)
-		if err != nil {
-			return fmt.Errorf("building %s: %s", base.name, err)
+		if e.skipBaseLayers {
+			// Load from cache instead of building
+			fmt.Printf("  Loading base layer from cache: %s\n", base.name)
+			layer, err := e.loadBaseLayerFromCache(base.name)
+			if err != nil {
+				return fmt.Errorf("loading cached %s: %s (try without --skip-base-layers)", base.name, err)
+			}
+			e.baseLayers[base.name] = []*ct.ImageLayer{layer}
+			fmt.Printf("  -> %s: id=%s size=%d\n", base.name, layer.ID, layer.Length)
+		} else {
+			fmt.Printf("  Building base layer: %s\n", base.name)
+			layer, err := e.buildBaseLayer(base.name, base.script)
+			if err != nil {
+				return fmt.Errorf("building %s: %s", base.name, err)
+			}
+			e.baseLayers[base.name] = []*ct.ImageLayer{layer}
+			fmt.Printf("  -> %s: id=%s size=%d\n", base.name, layer.ID, layer.Length)
 		}
-		e.baseLayers[base.name] = []*ct.ImageLayer{layer}
-		fmt.Printf("  -> %s: id=%s size=%d\n", base.name, layer.ID, layer.Length)
 	}
 
 	return nil
+}
+
+// loadBaseLayerFromCache finds the cached layer for the given base name.
+// It uses the known base layer hashes from the layer cache's JSON metadata.
+func (e *exporter) loadBaseLayerFromCache(name string) (*ct.ImageLayer, error) {
+	// Scan the cache for layers and check their JSON metadata to identify base layers.
+	// Base layers built by buildBaseLayer are large squashfs files.
+	// For busybox: ~2.5 MB with /bin/busybox, /etc/passwd
+	// For ubuntu-noble: ~158 MB with full Ubuntu rootfs
+
+	entries, err := os.ReadDir(e.layerCache)
+	if err != nil {
+		return nil, err
+	}
+
+	var bestID string
+	var bestSize int64
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".squashfs") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".squashfs")
+		size := info.Size()
+
+		if name == "ubuntu-noble" {
+			// Ubuntu Noble base is ~150-170 MB, has /etc/cloud/ directory
+			if size > 100*1024*1024 {
+				sqfsPath := filepath.Join(e.layerCache, entry.Name())
+				if isUbuntuNobleBase(sqfsPath) && size > bestSize {
+					bestSize = size
+					bestID = id
+				}
+			}
+		} else if name == "busybox" {
+			// Busybox base is ~2-3 MB (not 4KB which would be slugrunner)
+			if size > 1*1024*1024 && size < 10*1024*1024 {
+				// Verify it's actually busybox by checking it has /bin/busybox
+				sqfsPath := filepath.Join(e.layerCache, entry.Name())
+				if isBusyboxLayer(sqfsPath) {
+					if bestSize == 0 || size > bestSize {
+						bestSize = size
+						bestID = id
+					}
+				}
+			}
+		}
+	}
+
+	if bestID == "" {
+		return nil, fmt.Errorf("no cached layer found for %s", name)
+	}
+
+	// Read the cached layer and verify hash
+	squashfsPath := filepath.Join(e.layerCache, bestID+".squashfs")
+	data, err := os.ReadFile(squashfsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	digest := sha512.Sum512_256(data)
+	computedID := hex.EncodeToString(digest[:])
+	if computedID != bestID {
+		return nil, fmt.Errorf("cache integrity error: expected %s got %s", bestID, computedID)
+	}
+
+	return &ct.ImageLayer{
+		ID:     bestID,
+		Type:   ct.ImageLayerTypeSquashfs,
+		Length: int64(len(data)),
+		Hashes: map[string]string{
+			"sha512_256": bestID,
+		},
+	}, nil
+}
+
+// isBusyboxLayer checks if a squashfs file contains /bin/busybox
+func isBusyboxLayer(sqfsPath string) bool {
+	// Use unsquashfs to check for busybox binary
+	cmd := exec.Command("unsquashfs", "-l", sqfsPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "/bin/busybox")
+}
+
+// isUbuntuNobleBase checks if a squashfs is an Ubuntu Noble cloud-image base layer
+// (as opposed to a package-install diff layer that might also be large)
+func isUbuntuNobleBase(sqfsPath string) bool {
+	cmd := exec.Command("unsquashfs", "-l", sqfsPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	// Cloud images have /etc/cloud/ directory; package diff layers don't
+	return strings.Contains(string(out), "/etc/cloud/")
 }
 
 func (e *exporter) buildBaseLayer(name, scriptPath string) (*ct.ImageLayer, error) {
@@ -312,9 +429,17 @@ func (e *exporter) buildComponentImage(spec imageSpec) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// For ubuntu-noble based images, /bin is a symlink to usr/bin.
+	// Component layers must place files in /usr/bin/ to avoid creating
+	// a real /bin/ directory that shadows the base layer's symlink in overlayfs.
+	remapBin := spec.Base == "ubuntu-noble"
+
 	// Copy binaries
 	for srcName, destPath := range spec.Binaries {
 		srcPath := filepath.Join(e.binDir, srcName)
+		if remapBin && strings.HasPrefix(destPath, "/bin/") {
+			destPath = "/usr" + destPath
+		}
 		dst := filepath.Join(tmpDir, destPath)
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 			return err
@@ -327,12 +452,39 @@ func (e *exporter) buildComponentImage(spec imageSpec) error {
 	// Copy extra files
 	for srcRel, destPath := range spec.ExtraFiles {
 		srcPath := filepath.Join(e.sourceDir, srcRel)
+		if remapBin && strings.HasPrefix(destPath, "/bin/") {
+			destPath = "/usr" + destPath
+		}
 		dst := filepath.Join(tmpDir, destPath)
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 			return err
 		}
 		if err := copyFile(srcPath, dst, 0755); err != nil {
 			return fmt.Errorf("copying extra file %s: %s", srcRel, err)
+		}
+	}
+
+	// Copy extra directories
+	for srcRel, destPath := range spec.ExtraDirs {
+		srcPath := filepath.Join(e.sourceDir, srcRel)
+		dstBase := filepath.Join(tmpDir, destPath)
+		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(srcPath, path)
+			dst := filepath.Join(dstBase, rel)
+			if info.IsDir() {
+				return os.MkdirAll(dst, 0755)
+			}
+			// Skip macOS resource fork files
+			if strings.HasPrefix(filepath.Base(path), "._") {
+				return nil
+			}
+			return copyFile(path, dst, 0644)
+		})
+		if err != nil {
+			return fmt.Errorf("copying extra dir %s: %s", srcRel, err)
 		}
 	}
 
@@ -352,10 +504,17 @@ func (e *exporter) buildComponentImage(spec imageSpec) error {
 		return err
 	}
 
-	// Build the ImageManifest with base layers + component layer
+	// Build the ImageManifest with base layers + optional package layer + component layer
 	var allLayers []*ct.ImageLayer
 	if baseLayers, ok := e.baseLayers[spec.Base]; ok {
 		allLayers = append(allLayers, baseLayers...)
+	}
+	if spec.PackageScript != "" {
+		pkgLayer, err := e.buildPackageLayer(spec)
+		if err != nil {
+			return fmt.Errorf("building package layer for %s: %s", spec.Name, err)
+		}
+		allLayers = append(allLayers, pkgLayer)
 	}
 	allLayers = append(allLayers, componentLayer)
 
@@ -391,6 +550,150 @@ func (e *exporter) buildComponentImage(spec imageSpec) error {
 	fmt.Printf("  -> %s: manifest=%s layers=%d\n", spec.Name, manifest.ID()[:16], len(allLayers))
 
 	return nil
+}
+
+// buildPackageLayer runs a package installation script in a chroot on the base layer,
+// producing a squashfs layer containing only the changes (installed packages, users, etc.).
+// Results are cached by package script path so multiple images sharing the same script
+// only build the layer once.
+func (e *exporter) buildPackageLayer(spec imageSpec) (*ct.ImageLayer, error) {
+	// Check cache
+	if layer, ok := e.packageLayers[spec.PackageScript]; ok {
+		fmt.Printf("    Using cached package layer for %s\n", spec.PackageScript)
+		return layer, nil
+	}
+
+	fmt.Printf("    Building package layer: %s\n", spec.PackageScript)
+
+	// Check for pre-built package layer in pkgLayerDir
+	if e.pkgLayerDir != "" {
+		prebuiltPath := filepath.Join(e.pkgLayerDir, spec.Name+"-packages.squashfs")
+		if _, err := os.Stat(prebuiltPath); err == nil {
+			fmt.Printf("    Using pre-built package layer: %s\n", prebuiltPath)
+			layer, err := e.importSquashfs(prebuiltPath)
+			if err != nil {
+				return nil, fmt.Errorf("importing pre-built package layer: %s", err)
+			}
+			e.packageLayers[spec.PackageScript] = layer
+			fmt.Printf("    -> package layer: id=%s size=%d\n", layer.ID[:16], layer.Length)
+			return layer, nil
+		}
+	}
+
+	// Find the base layer squashfs file
+	baseLayers := e.baseLayers[spec.Base]
+	if len(baseLayers) == 0 {
+		return nil, fmt.Errorf("no base layers for %s", spec.Base)
+	}
+	baseLayerID := baseLayers[0].ID
+	baseSquashfs := filepath.Join(e.layerCache, baseLayerID+".squashfs")
+
+	// Create temp dirs for overlay mount
+	workDir, err := os.MkdirTemp("", "flynn-pkg-"+spec.Name)
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(workDir)
+
+	lowerDir := filepath.Join(workDir, "lower")
+	upperDir := filepath.Join(workDir, "upper")
+	mergedDir := filepath.Join(workDir, "merged")
+	overlayWork := filepath.Join(workDir, "work")
+	for _, d := range []string{lowerDir, upperDir, mergedDir, overlayWork} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			return nil, err
+		}
+	}
+
+	// Mount base squashfs
+	cmd := exec.Command("mount", "-t", "squashfs", "-o", "loop,ro", baseSquashfs, lowerDir)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("mount base squashfs: %s", err)
+	}
+	defer exec.Command("umount", "-l", lowerDir).Run()
+
+	// Mount overlayfs
+	overlayOpts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, overlayWork)
+	cmd = exec.Command("mount", "-t", "overlay", "overlay", "-o", overlayOpts, mergedDir)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("mount overlay: %s", err)
+	}
+	defer exec.Command("umount", "-l", mergedDir).Run()
+
+	// Bind-mount essential filesystems for chroot
+	for _, m := range []struct{ src, dst string }{
+		{"/proc", filepath.Join(mergedDir, "proc")},
+		{"/sys", filepath.Join(mergedDir, "sys")},
+		{"/dev", filepath.Join(mergedDir, "dev")},
+	} {
+		os.MkdirAll(m.dst, 0755)
+		cmd = exec.Command("mount", "--bind", m.src, m.dst)
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("bind mount %s: %s", m.src, err)
+		}
+		defer exec.Command("umount", "-l", m.dst).Run()
+	}
+
+	// Copy resolv.conf for network access during package install
+	resolvSrc := "/etc/resolv.conf"
+	resolvDst := filepath.Join(mergedDir, "etc/resolv.conf")
+	copyFile(resolvSrc, resolvDst, 0644)
+
+	// Copy the package script into the chroot
+	scriptSrc := filepath.Join(e.sourceDir, spec.PackageScript)
+	scriptDst := filepath.Join(mergedDir, "tmp/packages.sh")
+	os.MkdirAll(filepath.Dir(scriptDst), 0755)
+	if err := copyFile(scriptSrc, scriptDst, 0755); err != nil {
+		return nil, fmt.Errorf("copying package script: %s", err)
+	}
+
+	// Run the package script in chroot
+	cmd = exec.Command("chroot", mergedDir, "/bin/bash", "/tmp/packages.sh")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "DEBIAN_FRONTEND=noninteractive"}
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("running package script: %s", err)
+	}
+
+	// Clean up: remove the script, apt lists, and tmp files from upper
+	os.Remove(filepath.Join(upperDir, "tmp/packages.sh"))
+	os.RemoveAll(filepath.Join(upperDir, "var/lib/apt/lists"))
+	os.RemoveAll(filepath.Join(upperDir, "var/cache/apt"))
+	os.RemoveAll(filepath.Join(upperDir, "tmp"))
+
+	// Remove overlayfs whiteout/opaque markers for directories we don't want to shadow
+	// The upper dir now contains all the changes from package installation
+	// We need to clean overlayfs-specific xattrs before creating squashfs
+	// Actually, we want the raw upper dir content — overlayfs whiteouts are
+	// char devices (0,0) that mksquashfs will include, but they won't work
+	// as intended outside overlayfs. For package installs, we shouldn't have
+	// deletions, so whiteouts should be minimal. Let's just remove them.
+	exec.Command("find", upperDir, "-type", "c", "-delete").Run()
+
+	// Create squashfs from the upper directory (the diff)
+	squashfsPath := filepath.Join(workDir, "package-layer.squashfs")
+	cmd = exec.Command("mksquashfs", upperDir, squashfsPath, "-noappend")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("mksquashfs package layer: %s", err)
+	}
+
+	// Import the squashfs layer
+	layer, err := e.importSquashfs(squashfsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache it
+	e.packageLayers[spec.PackageScript] = layer
+	fmt.Printf("    -> package layer: id=%s size=%d\n", layer.ID[:16], layer.Length)
+
+	return layer, nil
 }
 
 // imageSpecs returns the specifications for all component images.
@@ -432,6 +735,12 @@ func (e *exporter) imageSpecs() []imageSpec {
 			ExtraFiles: map[string]string{
 				"controller/start.sh":        "/bin/start-flynn-controller",
 				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"schema/common.json":         "/etc/flynn-controller/jsonschema/common.json",
+				"schema/error.json":          "/etc/flynn-controller/jsonschema/error.json",
+			},
+			ExtraDirs: map[string]string{
+				"schema/controller": "/etc/flynn-controller/jsonschema/controller",
+				"schema/router":     "/etc/flynn-controller/jsonschema/router",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/start-flynn-controller"},
@@ -523,6 +832,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 			ExtraFiles: map[string]string{
 				"appliance/postgresql/start.sh": "/bin/start-flynn-postgres",
 			},
+			PackageScript: "appliance/postgresql/img/packages.sh",
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/start-flynn-postgres"},
 			},
@@ -539,6 +849,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"appliance/redis/dump.sh":    "/bin/dump-flynn-redis",
 				"appliance/redis/restore.sh": "/bin/restore-flynn-redis",
 			},
+			PackageScript: "appliance/redis/img/packages.sh",
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/start-flynn-redis"},
 			},
@@ -553,6 +864,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 			ExtraFiles: map[string]string{
 				"appliance/mariadb/start.sh": "/bin/start-flynn-mariadb",
 			},
+			PackageScript: "appliance/mariadb/img/packages.sh",
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/start-flynn-mariadb"},
 			},
@@ -569,6 +881,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"appliance/mongodb/dump.sh":    "/bin/dump-flynn-mongodb",
 				"appliance/mongodb/restore.sh": "/bin/restore-flynn-mongodb",
 			},
+			PackageScript: "appliance/mongodb/img/packages.sh",
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/start-flynn-mongodb"},
 			},
