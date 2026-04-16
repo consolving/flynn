@@ -2,10 +2,12 @@ package downloader
 
 import (
 	"compress/gzip"
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -150,17 +152,13 @@ func (d *Downloader) downloadSquashfsLayer(layer *ct.ImageLayer, layerURL string
 		return nil
 	}
 
-	u, err := url.Parse(layerURL)
-	if err != nil {
-		return err
-	}
-
-	target := u.Query().Get("target")
-	if target == "" {
-		return fmt.Errorf("missing target param in URL: %s", layerURL)
-	}
-
-	tmp, err := tufutil.Download(d.client, target)
+	// Download the layer directly from the URL (e.g. GitHub Releases).
+	// The original code used the TUF client for verified downloads, but
+	// our layer files are hosted on GitHub Releases (a different host
+	// from the TUF metadata on GitHub Pages), so the TUF client can't
+	// fetch them. Instead, download directly and verify the SHA256 hash
+	// against the layer ID (which IS the content hash).
+	tmp, err := d.downloadAndVerify(layerURL, layer.ID, layer.Length)
 	if err != nil {
 		return err
 	}
@@ -175,6 +173,48 @@ func (d *Downloader) downloadSquashfsLayer(layer *ct.ImageLayer, layerURL string
 		Meta:       meta,
 	})
 	return err
+}
+
+// downloadAndVerify fetches a URL to a temp file, verifying the SHA256 hash
+// and expected size. The returned file is seeked to the start.
+func (d *Downloader) downloadAndVerify(url, expectedHash string, expectedSize int64) (*tufutil.TempFile, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching %s: %s", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d fetching %s", resp.StatusCode, url)
+	}
+
+	tmp, err := tufutil.NewTempFile()
+	if err != nil {
+		return nil, err
+	}
+
+	h := sha512.New512_256()
+	n, err := io.Copy(tmp, io.TeeReader(resp.Body, h))
+	if err != nil {
+		tmp.Close()
+		return nil, fmt.Errorf("error downloading %s: %s", url, err)
+	}
+
+	if expectedSize > 0 && n != expectedSize {
+		tmp.Close()
+		return nil, fmt.Errorf("size mismatch for %s: expected %d, got %d", url, expectedSize, n)
+	}
+
+	actualHash := hex.EncodeToString(h.Sum(nil))
+	if actualHash != expectedHash {
+		tmp.Close()
+		return nil, fmt.Errorf("hash mismatch for %s: expected %s, got %s", url, expectedHash, actualHash)
+	}
+
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	return tmp, nil
 }
 
 func (d *Downloader) downloadGzippedFile(name, dir string, versionSuffix bool) (string, error) {
