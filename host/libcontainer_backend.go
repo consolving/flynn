@@ -39,7 +39,9 @@ import (
 	"github.com/flynn/flynn/pkg/shutdown"
 	"github.com/flynn/flynn/pkg/syslog/rfc5424"
 	"github.com/flynn/flynn/pkg/term"
+	"github.com/flynn/flynn/pkg/tufutil"
 	"github.com/flynn/flynn/pkg/verify"
+	tuf "github.com/flynn/go-tuf/client"
 	"github.com/golang/groupcache/singleflight"
 	"github.com/inconshreveable/log15"
 	dhcp "github.com/krolaw/dhcp4"
@@ -69,6 +71,8 @@ type LibcontainerConfig struct {
 	PartitionCGroups map[string]int64
 	Logger           log15.Logger
 	EnableDHCP       bool
+	TufDBPath        string
+	TufRepository    string
 }
 
 func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
@@ -108,6 +112,13 @@ func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
 		globalState:         &libcontainerGlobalState{},
 		defaultTmpfs:        defaultTmpfs,
 	}
+	if config.TufDBPath != "" && config.TufRepository != "" {
+		tufClient, err := newTufClient(config.TufDBPath, config.TufRepository)
+		if err != nil {
+			return nil, fmt.Errorf("error initializing TUF client: %s", err)
+		}
+		l.tufClient = tufClient
+	}
 	l.httpClient = &http.Client{Transport: &http.Transport{
 		Dial: dialer.RetryDial(l.discoverdDial),
 	}}
@@ -144,6 +155,7 @@ type LibcontainerBackend struct {
 	layerLoader     singleflight.Group
 	httpClient      *http.Client
 	discoverdClient *discoverd.Client
+	tufClient       *tuf.Client
 }
 
 type Container struct {
@@ -625,6 +637,65 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 		return err
 	}
 
+	// On Debian 13+ (and other systemd-resolved systems), /etc/resolv.conf
+	// in the base image is a symlink to /run/systemd/resolve/resolv.conf.
+	// Bind-mounting over a symlink doesn't work correctly with overlayfs:
+	// libcontainer's securejoin resolves the symlink to a different path,
+	// so the container ends up using the host's resolv.conf instead of
+	// discoverd's DNS. Fix this by replacing any symlink in the overlay
+	// upperdir with a copy of our resolv.conf, so the merged view has a
+	// regular file that the bind mount can target correctly.
+	containerResolvConf := filepath.Join(diffDir, "etc", "resolv.conf")
+	if err := os.MkdirAll(filepath.Join(diffDir, "etc"), 0755); err != nil {
+		log.Error("error creating container /etc in overlay upperdir", "err", err)
+		return err
+	}
+	resolvData, err := os.ReadFile(l.resolvConf)
+	if err != nil {
+		log.Error("error reading resolv.conf", "err", err)
+		return err
+	}
+	// Remove any existing symlink before writing the regular file
+	os.Remove(containerResolvConf)
+	if err := os.WriteFile(containerResolvConf, resolvData, 0644); err != nil {
+		log.Error("error writing resolv.conf to overlay upperdir", "err", err)
+		return err
+	}
+
+	// Inject binary overrides from host into the container's overlay upperdir.
+	// This allows deploying fixed versions of component binaries (e.g. flynn-postgres,
+	// flannel) without rebuilding the squashfs images. Any file placed in
+	// /etc/flynn/bin-overrides/ on the host will replace the corresponding
+	// file in the container's /bin/ directory.
+	binOverridesDir := "/etc/flynn/bin-overrides"
+	if entries, err := os.ReadDir(binOverridesDir); err == nil {
+		containerBinDir := filepath.Join(diffDir, "bin")
+		if err := os.MkdirAll(containerBinDir, 0755); err != nil {
+			log.Error("error creating container /bin in overlay upperdir", "err", err)
+			return err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			srcPath := filepath.Join(binOverridesDir, entry.Name())
+			dstPath := filepath.Join(containerBinDir, entry.Name())
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				log.Error("error reading bin override", "file", entry.Name(), "err", err)
+				continue
+			}
+			info, _ := entry.Info()
+			mode := info.Mode()
+			os.Remove(dstPath)
+			if err := os.WriteFile(dstPath, data, mode); err != nil {
+				log.Error("error writing bin override", "file", entry.Name(), "err", err)
+				continue
+			}
+			log.Info("injected bin override", "file", entry.Name())
+		}
+	}
+
 	config.Mounts = append(config.Mounts,
 		bindMount(l.InitPath, "/.containerinit", false),
 		bindMount(l.resolvConf, "/etc/resolv.conf", false),
@@ -878,15 +949,28 @@ func (l *LibcontainerBackend) mountSquashfs(m *host.Mountspec) (string, error) {
 			defer f.Close()
 			layer = f
 		case "http", "https":
-			res, err := l.httpClient.Get(m.URL)
-			if err != nil {
-				return "", fmt.Errorf("error getting squashfs layer from %s: %s", m.URL, err)
+			// Check if this is a TUF URL with a ?target= parameter.
+			// TUF URLs use consistent snapshots with hash-prefixed filenames
+			// that can't be fetched directly from a static file server.
+			// Use the TUF client to resolve and download these layers.
+			if target := u.Query().Get("target"); target != "" && l.tufClient != nil {
+				tmp, err := tufutil.Download(l.tufClient, target)
+				if err != nil {
+					return "", fmt.Errorf("error getting squashfs layer via TUF from %s: %s", m.URL, err)
+				}
+				defer tmp.Close()
+				layer = tmp
+			} else {
+				res, err := l.httpClient.Get(m.URL)
+				if err != nil {
+					return "", fmt.Errorf("error getting squashfs layer from %s: %s", m.URL, err)
+				}
+				defer res.Body.Close()
+				if res.StatusCode != http.StatusOK {
+					return "", fmt.Errorf("error getting squashfs layer from %s: unexpected HTTP status %s", m.URL, res.Status)
+				}
+				layer = res.Body
 			}
-			defer res.Body.Close()
-			if res.StatusCode != http.StatusOK {
-				return "", fmt.Errorf("error getting squashfs layer from %s: unexpected HTTP status %s", m.URL, res.Status)
-			}
-			layer = res.Body
 		default:
 			return "", fmt.Errorf("unknown layer URI scheme: %s", u.Scheme)
 		}
