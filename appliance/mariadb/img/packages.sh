@@ -3,15 +3,15 @@
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y software-properties-common apt-transport-https
-apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 \
-  4D1BB29D63D98E422B2113B19334A25F8507EFA5 \
-  177F4010FE56CA3336300305F1656F24C74CD1D8 \
+apt-get install -y curl ca-certificates gnupg software-properties-common apt-transport-https
 
-add-apt-repository 'deb http://nyc2.mirrors.digitalocean.com/mariadb/repo/10.1/ubuntu bionic main'
-add-apt-repository 'deb http://repo.percona.com/apt bionic main'
+# Add MariaDB 10.11 LTS repository for Noble
+curl -fsSL https://mariadb.org/mariadb_release_signing_key.pgp \
+  -o /etc/apt/keyrings/mariadb-keyring.pgp
+echo "deb [signed-by=/etc/apt/keyrings/mariadb-keyring.pgp] https://dlm.mariadb.com/repo/mariadb-server/10.11/repo/ubuntu noble main" \
+  > /etc/apt/sources.list.d/mariadb.list
+
 apt-get update
-apt-get install -y sudo
-apt-get install -y mariadb-server percona-xtrabackup
+apt-get install -y sudo mariadb-server mariadb-backup
 apt-get clean
 apt-get autoremove -y

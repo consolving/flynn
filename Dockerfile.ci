@@ -10,7 +10,7 @@
 # For unit tests:
 #   docker run --rm -v $(pwd):/go/src/github.com/flynn/flynn -w /go/src/github.com/flynn/flynn flynn-ci make test-unit-standalone
 
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

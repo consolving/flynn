@@ -274,9 +274,9 @@
     }
   },
   {
-    "id": "slugbuilder-18-image",
+    "id": "slugbuilder-24-image",
     "action": "create-artifact",
-    "artifact": $image_artifact[slugbuilder-18]
+    "artifact": $image_artifact[slugbuilder-24]
   },
   {
     "id": "slugbuilder-14-image",
@@ -284,9 +284,9 @@
     "artifact": $image_artifact[slugbuilder-14]
   },
   {
-    "id": "slugrunner-18-image",
+    "id": "slugrunner-24-image",
     "action": "create-artifact",
-    "artifact": $image_artifact[slugrunner-18]
+    "artifact": $image_artifact[slugrunner-24]
   },
   {
     "id": "slugrunner-14-image",
@@ -490,9 +490,9 @@
     "release": {
       "env": {
         "CONTROLLER_KEY": "{{ (index .StepData \"controller-key\").Data }}",
-        "SLUGBUILDER_18_IMAGE_ID": "{{ (index .StepData \"slugbuilder-18-image\").ID }}",
+        "SLUGBUILDER_24_IMAGE_ID": "{{ (index .StepData \"slugbuilder-24-image\").ID }}",
         "SLUGBUILDER_14_IMAGE_ID": "{{ (index .StepData \"slugbuilder-14-image\").ID }}",
-        "SLUGRUNNER_18_IMAGE_ID": "{{ (index .StepData \"slugrunner-18-image\").ID }}",
+        "SLUGRUNNER_24_IMAGE_ID": "{{ (index .StepData \"slugrunner-24-image\").ID }}",
         "SLUGRUNNER_14_IMAGE_ID": "{{ (index .StepData \"slugrunner-14-image\").ID }}"
       },
       "processes": {
@@ -643,9 +643,9 @@
     "release": {
       "env": {
         "CONTROLLER_KEY": "{{ (index .StepData \"controller-key\").Data }}",
-        "SLUGBUILDER_18_IMAGE_ID": "{{ (index .StepData \"slugbuilder-18-image\").ID }}",
+        "SLUGBUILDER_24_IMAGE_ID": "{{ (index .StepData \"slugbuilder-24-image\").ID }}",
         "SLUGBUILDER_14_IMAGE_ID": "{{ (index .StepData \"slugbuilder-14-image\").ID }}",
-        "SLUGRUNNER_18_IMAGE_ID": "{{ (index .StepData \"slugrunner-18-image\").ID }}",
+        "SLUGRUNNER_24_IMAGE_ID": "{{ (index .StepData \"slugrunner-24-image\").ID }}",
         "SLUGRUNNER_14_IMAGE_ID": "{{ (index .StepData \"slugrunner-14-image\").ID }}"
       }
     }

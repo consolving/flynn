@@ -56,27 +56,10 @@
       ]
     },
     {
-      "id": "ubuntu-xenial",
+      "id": "ubuntu-noble",
       "layers": [
         {
-          "script": "builder/img/ubuntu-xenial.sh",
-          "inputs": [
-            "builder/ubuntu-setup.sh"
-          ],
-          "limits": {
-            "temp_disk": "2GB"
-          },
-          "linux_capabilities": [
-            "CAP_SYS_ADMIN"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ubuntu-bionic",
-      "layers": [
-        {
-          "script": "builder/img/ubuntu-bionic.sh",
+          "script": "builder/img/ubuntu-noble.sh",
           "inputs": [
             "builder/ubuntu-setup.sh"
           ],
@@ -99,7 +82,7 @@
     },
     {
       "id": "go",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "script": "builder/img/go.sh",
@@ -182,7 +165,7 @@
     },
     {
       "id": "host",
-      "base": "ubuntu-xenial",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "host-packages",
@@ -275,7 +258,7 @@
     },
     {
       "id": "postgres",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "postgres-packages",
@@ -303,7 +286,7 @@
     },
     {
       "id": "mariadb",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "mariadb-packages",
@@ -331,7 +314,7 @@
     },
     {
       "id": "mongodb",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "mongodb-packages",
@@ -361,7 +344,7 @@
     },
     {
       "id": "redis",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "redis-packages",
@@ -391,7 +374,7 @@
     },
     {
       "id": "blobstore",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "gobuild": {
@@ -433,7 +416,7 @@
     },
     {
       "id": "gitreceive",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "gitreceive-packages",
@@ -461,7 +444,7 @@
     },
     {
       "id": "tarreceive",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "gobuild": {
@@ -493,7 +476,7 @@
     },
     {
       "id": "taffy",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "taffy-packages",
@@ -517,11 +500,11 @@
       }
     },
     {
-      "id": "heroku-18",
-      "base": "ubuntu-bionic",
+      "id": "heroku-24",
+      "base": "ubuntu-noble",
       "layers": [
         {
-          "script": "builder/img/heroku-18.sh",
+          "script": "builder/img/heroku-24.sh",
           "limits": {
             "temp_disk": "2G"
           }
@@ -529,11 +512,11 @@
       ]
     },
     {
-      "id": "heroku-18-build",
-      "base": "heroku-18",
+      "id": "heroku-24-build",
+      "base": "heroku-24",
       "layers": [
         {
-          "script": "builder/img/heroku-18-build.sh",
+          "script": "builder/img/heroku-24-build.sh",
           "limits": {
             "temp_disk": "2G"
           }
@@ -553,8 +536,8 @@
       ]
     },
     {
-      "id": "slugbuilder-18",
-      "base": "heroku-18-build",
+      "id": "slugbuilder-24",
+      "base": "heroku-24-build",
       "layers": [
         {
           "name": "slugbuilder-packages",
@@ -615,8 +598,8 @@
       }
     },
     {
-      "id": "slugrunner-18",
-      "base": "heroku-18",
+      "id": "slugrunner-24",
+      "base": "heroku-24",
       "layers": [
         {
           "copy": {
@@ -727,7 +710,7 @@
     },
     {
       "id": "test",
-      "base": "ubuntu-bionic",
+      "base": "ubuntu-noble",
       "layers": [
         {
           "name": "test-packages",
@@ -771,7 +754,7 @@
       "base": "busybox",
       "layers": [
         {
-          "build_with": "ubuntu-bionic",
+          "build_with": "ubuntu-noble",
           "name": "test-apps-minio",
           "script": "test/apps/minio.sh"
         },
