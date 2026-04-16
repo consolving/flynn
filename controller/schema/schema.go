@@ -23,7 +23,7 @@ func Load(schemaRoot string) error {
 
 	var schemaPaths []string
 	walkFn := func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() && filepath.Ext(path) == ".json" {
+		if !info.IsDir() && filepath.Ext(path) == ".json" && !strings.HasPrefix(filepath.Base(path), "._") {
 			schemaPaths = append(schemaPaths, path)
 		}
 		return nil
