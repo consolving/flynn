@@ -347,8 +347,9 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 	if p.running() && p.config().Role == state.RoleSync {
 		log.Info("promoting to primary")
 
-		if err := os.WriteFile(p.triggerPath(), nil, 0655); err != nil {
-			log.Error("error creating trigger file", "path", p.triggerPath(), "err", err)
+		// PG 16 removed promote_trigger_file; use pg_ctl promote instead
+		if err := p.runCmd(exec.Command(p.binPath("pg_ctl"), "promote", "-D", p.dataDir)); err != nil {
+			log.Error("error promoting standby", "err", err)
 			return err
 		}
 
@@ -369,6 +370,10 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 
 	if err := os.Remove(p.recoveryConfPath()); err != nil && !os.IsNotExist(err) {
 		log.Error("error removing recovery.conf", "path", p.recoveryConfPath(), "err", err)
+		// non-fatal, PG 16 doesn't use recovery.conf
+	}
+	if err := os.Remove(p.standbySignalPath()); err != nil && !os.IsNotExist(err) {
+		log.Error("error removing standby.signal", "path", p.standbySignalPath(), "err", err)
 		return err
 	}
 
@@ -483,6 +488,14 @@ func (p *Process) installExtensionsInTemplate() error {
 			return fmt.Errorf("creating extension %s in template1: %s", ext, err)
 		}
 	}
+
+	// In PostgreSQL 15+, the default CREATE privilege on the public schema was
+	// revoked for non-owner roles. Restore the PG14 behavior so that application
+	// users can create tables in the public schema of their databases.
+	if _, err := templateDB.Exec("GRANT ALL ON SCHEMA public TO PUBLIC"); err != nil {
+		return fmt.Errorf("granting public schema privileges in template1: %s", err)
+	}
+
 	return nil
 }
 
@@ -536,12 +549,8 @@ func (p *Process) assumeStandby(upstream, downstream *discoverd.Instance) error 
 		os.Remove(p.triggerPath())
 	}
 
-	if err := p.writeConfig(configData{ReadOnly: true}); err != nil {
-		log.Error("error writing postgres.conf", "path", p.configPath(), "err", err)
-		return err
-	}
-	if err := p.writeRecoveryConf(upstream); err != nil {
-		log.Error("error writing recovery.conf", "path", p.recoveryConfPath(), "err", err)
+	if err := p.writeRecoveryConf(upstream, configData{ReadOnly: true}); err != nil {
+		log.Error("error writing recovery config", "path", p.configPath(), "err", err)
 		return err
 	}
 
@@ -897,21 +906,21 @@ func (p *Process) writeConfig(d configData) error {
 	return configTemplate.Execute(f, d)
 }
 
-func (p *Process) writeRecoveryConf(upstream *discoverd.Instance) error {
-	data := recoveryData{
-		TriggerFile: p.triggerPath(),
-		PrimaryInfo: fmt.Sprintf(
-			"host=%s port=%s user=flynn password=%s application_name=%s",
-			upstream.Host(), upstream.Port(), p.password, p.id,
-		),
-	}
+func (p *Process) recoveryConfigData(upstream *discoverd.Instance, d configData) configData {
+	d.PrimaryConnInfo = fmt.Sprintf(
+		"host=%s port=%s user=flynn password=%s application_name=%s",
+		upstream.Host(), upstream.Port(), p.password, p.id,
+	)
+	return d
+}
 
-	f, err := os.Create(p.recoveryConfPath())
-	if err != nil {
+func (p *Process) writeRecoveryConf(upstream *discoverd.Instance, d configData) error {
+	// PG 12+ uses postgresql.conf for recovery settings + standby.signal file
+	if err := p.writeConfig(p.recoveryConfigData(upstream, d)); err != nil {
 		return err
 	}
-	defer f.Close()
-	return recoveryConfTemplate.Execute(f, data)
+	// Create standby.signal to indicate this is a standby
+	return os.WriteFile(p.standbySignalPath(), nil, 0644)
 }
 
 func (p *Process) writeHBAConf() error {
@@ -923,7 +932,12 @@ func (p *Process) configPath() string {
 }
 
 func (p *Process) recoveryConfPath() string {
+	// PG 16 no longer uses recovery.conf; keep this for cleanup of old files
 	return p.dataPath("recovery.conf")
+}
+
+func (p *Process) standbySignalPath() string {
+	return p.dataPath("standby.signal")
 }
 
 func (p *Process) hbaConfPath() string {
@@ -951,6 +965,9 @@ type configData struct {
 	TimescaleDB  bool
 	ExtWhitelist bool
 	SHMType      string
+
+	// Recovery settings (PG 12+ uses postgresql.conf instead of recovery.conf)
+	PrimaryConnInfo string
 }
 
 var configTemplate = template.Must(template.New("postgresql.conf").Parse(`
@@ -960,10 +977,10 @@ port = {{.Port}}
 ssl = off
 max_connections = 400
 shared_buffers = 32MB
-wal_level = hot_standby
+wal_level = replica
 fsync = on
 max_wal_senders = 15
-wal_keep_segments = 128
+wal_keep_size = 2048
 synchronous_commit = remote_write
 synchronous_standby_names = '{{.Sync}}'
 {{if .ReadOnly}}
@@ -985,6 +1002,7 @@ datestyle = 'iso, mdy'
 timezone = 'UTC'
 client_encoding = 'UTF8'
 default_text_search_config = 'pg_catalog.english'
+password_encryption = md5
 
 {{if .TimescaleDB}}
 shared_preload_libraries = 'timescaledb'
@@ -998,18 +1016,12 @@ dynamic_shared_memory_type = '{{.SHMType}}'
 local_preload_libraries = 'pgextwlist'
 extwlist.extensions = 'btree_gin,btree_gist,chkpass,citext,cube,dblink,dict_int,earthdistance,fuzzystrmatch,hstore,intarray,isn,ltree,pg_prewarm,pg_stat_statements,pg_trgm,pgcrypto,pgrouting,pgrowlocks,pgstattuple,plpgsql,plv8,postgis,postgis_topology,postgres_fdw,tablefunc,timescaledb,unaccent,uuid-ossp'
 {{end}}
-`[1:]))
 
-type recoveryData struct {
-	PrimaryInfo string
-	TriggerFile string
-}
-
-var recoveryConfTemplate = template.Must(template.New("recovery.conf").Parse(`
-standby_mode = on
-primary_conninfo = '{{.PrimaryInfo}}'
-trigger_file = '{{.TriggerFile}}'
+{{if .PrimaryConnInfo}}
+# Recovery settings (managed by flynn-postgres, PG 12+)
+primary_conninfo = '{{.PrimaryConnInfo}}'
 recovery_target_timeline = 'latest'
+{{end}}
 `[1:]))
 
 var hbaConf = []byte(`

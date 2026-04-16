@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"context"
 	"github.com/flynn/flynn/discoverd/client"
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/postgres"
@@ -13,7 +14,6 @@ import (
 	"github.com/flynn/flynn/pkg/resource"
 	"github.com/flynn/flynn/pkg/shutdown"
 	"github.com/julienschmidt/httprouter"
-	"context"
 )
 
 const (
@@ -78,7 +78,7 @@ func (p *pgAPI) createDatabase(ctx context.Context, w http.ResponseWriter, req *
 		httphelper.Error(w, err)
 		return
 	}
-	if err := p.db.Exec(fmt.Sprintf(`CREATE DATABASE "%s"`, database)); err != nil {
+	if err := p.db.Exec(fmt.Sprintf(`CREATE DATABASE "%s" OWNER "%s"`, database, username)); err != nil {
 		p.db.Exec(fmt.Sprintf(`DROP USER "%s"`, username))
 		httphelper.Error(w, err)
 		return

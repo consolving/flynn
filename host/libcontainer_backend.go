@@ -39,6 +39,7 @@ import (
 	"github.com/flynn/flynn/pkg/shutdown"
 	"github.com/flynn/flynn/pkg/syslog/rfc5424"
 	"github.com/flynn/flynn/pkg/term"
+	"github.com/flynn/flynn/pkg/tufconfig"
 	"github.com/flynn/flynn/pkg/tufutil"
 	"github.com/flynn/flynn/pkg/verify"
 	tuf "github.com/flynn/go-tuf/client"
@@ -116,6 +117,21 @@ func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
 		tufClient, err := newTufClient(config.TufDBPath, config.TufRepository)
 		if err != nil {
 			return nil, fmt.Errorf("error initializing TUF client: %s", err)
+		}
+		// Update the local TUF metadata from the remote repository
+		// so that target lookups in Download() can find the targets.
+		// Initialize root keys if this is a fresh local store.
+		if _, err := tufClient.Update(); err != nil {
+			if err == tuf.ErrNoRootKeys {
+				if err := tufClient.Init(tufconfig.RootKeys, 1); err != nil {
+					return nil, fmt.Errorf("error initializing TUF root keys: %s", err)
+				}
+				if _, err := tufClient.Update(); err != nil && !tuf.IsLatestSnapshot(err) {
+					return nil, fmt.Errorf("error updating TUF metadata after init: %s", err)
+				}
+			} else if !tuf.IsLatestSnapshot(err) {
+				return nil, fmt.Errorf("error updating TUF metadata: %s", err)
+			}
 		}
 		l.tufClient = tufClient
 	}

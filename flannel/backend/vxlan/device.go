@@ -20,7 +20,8 @@ type vxlanDeviceAttrs struct {
 }
 
 type vxlanDevice struct {
-	link *netlink.Vxlan
+	link       *netlink.Vxlan
+	desiredMAC net.HardwareAddr
 }
 
 func newVXLANDevice(devAttrs *vxlanDeviceAttrs) (*vxlanDevice, error) {
@@ -79,7 +80,8 @@ func newVXLANDevice(devAttrs *vxlanDeviceAttrs) (*vxlanDevice, error) {
 	}
 
 	return &vxlanDevice{
-		link: link,
+		link:       link,
+		desiredMAC: link.HardwareAddr,
 	}, nil
 }
 
@@ -132,6 +134,20 @@ func (dev *vxlanDevice) Configure(ipn ip.IP4Net) error {
 
 	if err := netlink.LinkSetUp(dev.link); err != nil {
 		return fmt.Errorf("failed to set interface %s to UP state: %s", dev.link.Attrs().Name, err)
+	}
+
+	// Re-apply the desired MAC address after LinkSetUp, because some kernels
+	// regenerate the VXLAN MAC when the interface transitions to UP state.
+	if dev.desiredMAC != nil {
+		current, _ := netlink.LinkByIndex(dev.link.Index)
+		if current != nil && !macEqual(current.Attrs().HardwareAddr, dev.desiredMAC) {
+			log.Infof("MAC changed after LinkSetUp (got %s, want %s), re-applying", current.Attrs().HardwareAddr, dev.desiredMAC)
+			if err := netlink.LinkSetHardwareAddr(dev.link, dev.desiredMAC); err != nil {
+				log.Warningf("failed to re-apply MAC on %s: %v", dev.link.Name, err)
+			} else {
+				dev.link.HardwareAddr = dev.desiredMAC
+			}
+		}
 	}
 
 	// explicitly add a route since there might be a route for a subnet already
