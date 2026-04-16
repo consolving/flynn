@@ -48,7 +48,7 @@ func (s *BackupSuite) Test_v20190730_0_nodejs_redis(t *c.C) {
 }
 
 func (s *BackupSuite) testStackRedeploy(t *c.C, x *Cluster) {
-	// deploy app again, confirm stack is heroku-18
+	// deploy app again, confirm stack is heroku-24
 	r := s.newGitRepo(t, "https://github.com/flynn-examples/nodejs-flynn-example")
 	r.cluster = x
 	t.Assert(r.git("commit", "-m", "second", "--allow-empty"), Succeeds)
@@ -56,7 +56,7 @@ func (s *BackupSuite) testStackRedeploy(t *c.C, x *Cluster) {
 	t.Assert(r.git("push", "flynn", "master"), Succeeds)
 	release, err := x.controller.GetAppRelease("nodejs")
 	t.Assert(err, c.IsNil)
-	t.Assert(release.Meta["slugrunner.stack"], c.Equals, "heroku-18")
+	t.Assert(release.Meta["slugrunner.stack"], c.Equals, "heroku-24")
 
 	// deploy app again with stack set to cedar-14
 	t.Assert(r.git("commit", "-m", "third", "--allow-empty"), Succeeds)
@@ -114,7 +114,7 @@ func (s *BackupSuite) testClusterBackupWithFn(t *c.C, name string, fn func(*c.C,
 	debug(t, "getting app release")
 	release, err := x.controller.GetAppRelease("nodejs")
 	t.Assert(err, c.IsNil)
-	stack := "heroku-18"
+	stack := "heroku-24"
 	if strings.HasPrefix(name, "v2016") || strings.HasPrefix(name, "v2017") {
 		stack = "cedar-14"
 	}

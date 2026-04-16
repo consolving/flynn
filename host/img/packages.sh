@@ -4,18 +4,12 @@
 # either in a container or in a VM
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-# explicitly install linux 4.13 as the version of ZFS available on xenial is
-# not compatible with linux 4.15 (the 'zfs' command just hangs)
-apt-get install --yes linux-image-4.13.0-1019-gcp initramfs-tools systemd udev zfsutils-linux iptables net-tools iproute2 qemu-kvm
+apt-get install --yes systemd udev zfsutils-linux iptables net-tools iproute2
 apt-get clean
 
-# support 9p rootfs when starting in a VM
-printf '%s\n' 9p 9pnet 9pnet_virtio >> /etc/initramfs-tools/modules
-update-initramfs -u
-
 # install jq for reading container config files
-JQ_URL="https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
-JQ_SHA="af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44"
+JQ_URL="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64"
+JQ_SHA="5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5"
 curl -fsSLo /tmp/jq "${JQ_URL}"
 echo "${JQ_SHA}  /tmp/jq" | sha256sum -c -
 mv /tmp/jq /usr/local/bin/jq

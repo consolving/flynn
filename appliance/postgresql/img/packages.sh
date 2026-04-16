@@ -2,25 +2,31 @@
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
-echo "deb http://apt.postgresql.org/pub/repos/apt/ bionic-pgdg main" >> /etc/apt/sources.list.d/postgresql.list
+# Install prerequisites
+apt-get update
+apt-get install -y curl ca-certificates gnupg lsb-release
+
+# Add PostgreSQL APT repository (PGDG) for Noble
+install -d /usr/share/postgresql-common/pgdg
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+  -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt/ noble-pgdg main" \
+  > /etc/apt/sources.list.d/pgdg.list
+
 apt-get update
 apt-get dist-upgrade -y
-apt-get -qy --fix-missing --force-yes install language-pack-en software-properties-common
-update-locale LANG=en_US.UTF-8 LANGUAGE=en_US.UTF-8 LC_ALL=en_US.UTF-8
-dpkg-reconfigure locales
-apt-get -y install curl sudo
-add-apt-repository ppa:timescale/timescaledb-ppa
-apt-get update
 apt-get install -y -q \
+  language-pack-en \
   less \
-  postgresql-11 \
-  postgresql-contrib-11 \
-  postgresql-11-pgextwlist \
-  postgresql-11-postgis-2.5 \
-  postgresql-11-pgrouting \
-  timescaledb-postgresql-11
+  sudo \
+  postgresql-16 \
+  postgresql-contrib \
+  postgresql-16-postgis-3 \
+  postgresql-16-pgrouting
 apt-get clean
 apt-get autoremove -y
+
+update-locale LANG=en_US.UTF-8 LANGUAGE=en_US.UTF-8 LC_ALL=en_US.UTF-8
+dpkg-reconfigure locales
 
 echo "\set HISTFILE /dev/null" > /root/.psqlrc

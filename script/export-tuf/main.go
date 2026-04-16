@@ -188,18 +188,18 @@ func (e *exporter) buildBaseLayers() error {
 	//
 	// Dependency tree:
 	//   busybox (standalone)
-	//   ubuntu-bionic (standalone)
-	//   ubuntu-xenial (standalone, needed only for host image)
+	//   ubuntu-noble (standalone)
+	//   ubuntu-noble (standalone, needed only for host image)
 
 	bases := []struct {
 		name   string
 		script string
 	}{
 		{"busybox", "builder/img/busybox.sh"},
-		{"ubuntu-bionic", "builder/img/ubuntu-bionic.sh"},
-		// ubuntu-xenial needed for host image but host image also needs
+		{"ubuntu-noble", "builder/img/ubuntu-noble.sh"},
+		// ubuntu-noble needed for host image but host image also needs
 		// kernel packages which require a full apt - skip for now as
-		// the host image will use ubuntu-bionic in the simplified pipeline
+		// the host image will use ubuntu-noble in the simplified pipeline
 	}
 
 	for _, base := range bases {
@@ -481,10 +481,10 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 		},
 
-		// --- ubuntu-bionic-based images ---
+		// --- ubuntu-noble-based images ---
 		{
 			Name: "blobstore",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-blobstore": "/bin/flynn-blobstore",
 			},
@@ -497,7 +497,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "host",
-			Base: "ubuntu-bionic", // simplified: using bionic instead of xenial
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-host": "/usr/local/bin/flynn-host",
 				"flynn-init": "/usr/local/bin/flynn-init",
@@ -515,7 +515,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "postgres",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-postgres":     "/bin/flynn-postgres",
 				"flynn-postgres-api": "/bin/flynn-postgres-api",
@@ -529,7 +529,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "redis",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-redis":     "/bin/flynn-redis",
 				"flynn-redis-api": "/bin/flynn-redis-api",
@@ -545,7 +545,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "mariadb",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-mariadb":     "/bin/flynn-mariadb",
 				"flynn-mariadb-api": "/bin/flynn-mariadb-api",
@@ -559,7 +559,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "mongodb",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-mongodb":     "/bin/flynn-mongodb",
 				"flynn-mongodb-api": "/bin/flynn-mongodb-api",
@@ -575,7 +575,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "gitreceive",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"gitreceived":    "/bin/gitreceived",
 				"flynn-receiver": "/bin/flynn-receiver",
@@ -589,7 +589,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "tarreceive",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"tarreceive": "/bin/tarreceive",
 			},
@@ -599,7 +599,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "taffy",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"taffy":          "/bin/taffy",
 				"flynn-receiver": "/bin/flynn-receiver",
@@ -609,8 +609,8 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 		},
 		{
-			Name: "slugbuilder-18",
-			Base: "ubuntu-bionic",
+			Name: "slugbuilder-24",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"create-artifact": "/bin/create-artifact",
 				"slug-migrator":   "/bin/slug-migrator",
@@ -626,7 +626,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "slugbuilder-14",
-			Base: "ubuntu-bionic", // simplified: using bionic instead of cedar-14/trusty
+			Base: "ubuntu-noble", // simplified: using noble instead of cedar-14/trusty
 			Binaries: map[string]string{
 				"create-artifact": "/bin/create-artifact",
 				"slug-migrator":   "/bin/slug-migrator",
@@ -641,8 +641,8 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 		},
 		{
-			Name: "slugrunner-18",
-			Base: "ubuntu-bionic",
+			Name: "slugrunner-24",
+			Base: "ubuntu-noble",
 			ExtraFiles: map[string]string{
 				"slugrunner/runner/init": "/runner/init",
 			},
@@ -652,7 +652,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "slugrunner-14",
-			Base: "ubuntu-bionic", // simplified
+			Base: "ubuntu-noble", // simplified
 			ExtraFiles: map[string]string{
 				"slugrunner/runner/init": "/runner/init",
 			},
@@ -662,7 +662,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 		},
 		{
 			Name: "builder",
-			Base: "ubuntu-bionic",
+			Base: "ubuntu-noble",
 			Binaries: map[string]string{
 				"flynn-builder": "/bin/flynn-builder",
 			},

@@ -40,8 +40,17 @@ apt-get install --yes squashfs-tools curl gnupg
 rm -rf /var/lib/apt/lists/*
 # this forces "apt-get update" in dependent images, which is also good
 
-# enable the universe
-sed -i 's/^#\s*\(deb.*universe\)$/\1/g' /etc/apt/sources.list
+# enable the universe repository
+if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+	# Noble (24.04+) uses DEB822 format — universe is typically already included
+	# by debootstrap, but ensure it's there
+	if ! grep -q 'Components:.*universe' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null; then
+		sed -i 's/^Components: \(.*\)/Components: \1 universe/' /etc/apt/sources.list.d/ubuntu.sources
+	fi
+elif [ -f /etc/apt/sources.list ]; then
+	# Bionic/Xenial/Trusty use traditional sources.list format
+	sed -i 's/^#\s*\(deb.*universe\)$/\1/g' /etc/apt/sources.list
+fi
 
 # make systemd-detect-virt return "docker"
 # See: https://github.com/systemd/systemd/blob/aa0c34279ee40bce2f9681b496922dedbadfca19/src/basic/virt.c#L434

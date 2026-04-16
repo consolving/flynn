@@ -318,6 +318,8 @@ func runDaemon(args *docopt.Args) {
 			PartitionCGroups: partitionCGroups,
 			Logger:           logger.New("host.id", hostID, "component", "backend", "backend", "libcontainer"),
 			EnableDHCP:       enableDHCP,
+			TufDBPath:        "/etc/flynn/tuf.db",
+			TufRepository:    "https://consolving.github.io/flynn-tuf-repo/repository",
 		})
 	case "mock":
 		backend = MockBackend{}

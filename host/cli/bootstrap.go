@@ -690,19 +690,19 @@ UPDATE artifacts SET uri = '%s', type = 'flynn', manifest = '%s', hashes = '%s',
 );`, artifact.URI, jsonb(&artifact.RawManifest), jsonb(artifact.Hashes), artifact.Size, artifact.LayerURLTemplate, jsonb(artifact.Meta), step.ID))
 	}
 
-	// create the slugbuilder/slugrunner-18 artifacts if they don't exist
+	// create the slugbuilder/slugrunner-24 artifacts if they don't exist
 	for _, name := range []string{"slugbuilder", "slugrunner"} {
-		artifact := artifacts[name+"-18-image"]
+		artifact := artifacts[name+"-24-image"]
 		sqlBuf.WriteString(fmt.Sprintf(`
 DO $$
   BEGIN
-    IF (SELECT env->>'%s_18_IMAGE_ID' FROM releases WHERE release_id = (SELECT release_id FROM apps WHERE name = 'gitreceive' AND deleted_at IS NULL)) IS NULL THEN
+    IF (SELECT env->>'%s_24_IMAGE_ID' FROM releases WHERE release_id = (SELECT release_id FROM apps WHERE name = 'gitreceive' AND deleted_at IS NULL)) IS NULL THEN
       INSERT INTO artifacts (artifact_id, type, uri, manifest, hashes, size, layer_url_template, meta) VALUES ('%s', 'flynn', '%s', '%s', '%s', %d, '%s', '%s');
     END IF;
   END;
 $$;`, strings.ToUpper(name), random.UUID(), artifact.URI, jsonb(&artifact.RawManifest), jsonb(artifact.Hashes), artifact.Size, artifact.LayerURLTemplate, jsonb(artifact.Meta)))
 
-		// update pre-slugrunner/slugbuilder-18 artifacts currently being referenced by gitreceive
+		// update pre-slugrunner/slugbuilder-24 artifacts currently being referenced by gitreceive
 		// (which will also update all current user releases to use slugrunner-14)
 		artifact = artifacts[name+"-14-image"]
 		sqlBuf.WriteString(fmt.Sprintf(`
@@ -712,14 +712,14 @@ OR uri = (SELECT env->>'%[7]s_IMAGE_URI' FROM releases WHERE release_id = (SELEC
 			artifact.URI, jsonb(&artifact.RawManifest), jsonb(artifact.Hashes), artifact.Size, artifact.LayerURLTemplate, jsonb(artifact.Meta), strings.ToUpper(name)))
 	}
 
-	// update pre-slugbuilder-18 releases with a stack tag
+	// update pre-slugbuilder-24 releases with a stack tag
 	sqlBuf.WriteString(`UPDATE releases SET meta = jsonb_set(meta, '{slugrunner.stack}', '"cedar-14"') WHERE meta->>'slugrunner.stack' IS NULL and meta->>'git' = 'true';`)
 
 	// update slug artifacts currently being referenced by gitreceive
 	// (which will also update all current user releases to use the
 	// latest slugrunner images)
 	for _, name := range []string{"slugbuilder", "slugrunner"} {
-		for _, version := range []string{"14", "18"} {
+		for _, version := range []string{"14", "24"} {
 			artifact := artifacts[fmt.Sprintf("%s-%s-image", name, version)]
 			sqlBuf.WriteString(fmt.Sprintf(`
 UPDATE artifacts SET uri = '%s', type = 'flynn', manifest = '%s', hashes = '%s', size = %d, layer_url_template = '%s', meta = '%s'
@@ -745,9 +745,9 @@ UPDATE releases SET env = jsonb_set(env, '{REDIS_IMAGE_ID}', ('"' || (SELECT art
 WHERE env->>'REDIS_IMAGE_URI' IS NOT NULL;`,
 		artifacts["redis-image"].URI))
 
-	// ensure recent SLUGBUILDER/SLUGRUNNER_18/14_IMAGE_ID variables are set on the appropriate releases
+	// ensure recent SLUGBUILDER/SLUGRUNNER_24/14_IMAGE_ID variables are set on the appropriate releases
 	for _, name := range []string{"slugbuilder", "slugrunner"} {
-		for _, version := range []string{"18", "14"} {
+		for _, version := range []string{"24", "14"} {
 			artifact := artifacts[fmt.Sprintf("%s-%s-image", name, version)]
 			sqlBuf.WriteString(fmt.Sprintf(`
 UPDATE releases SET env = jsonb_set(env, '{%[1]s_%[2]s_IMAGE_ID}', ('"' || (SELECT artifact_id::text FROM artifacts WHERE uri = '%[3]s') || '"')::jsonb, true)
