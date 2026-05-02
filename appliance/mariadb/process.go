@@ -924,6 +924,7 @@ func (p *Process) installDB() error {
 	p.runCmd(exec.Command(
 		filepath.Join(p.BinDir, "mysql_install_db"),
 		"--defaults-extra-file="+p.ConfigPath(),
+		"--auth-root-authentication-method=normal",
 	))
 
 	return nil

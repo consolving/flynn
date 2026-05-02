@@ -791,6 +791,29 @@ func (p *Peer) evalInitClusterState() {
 		return
 	}
 	if p.Info().State.Singleton {
+		// In singleton mode, if the old primary is gone and we're the only
+		// peer, take over by writing a new generation with ourselves as primary.
+		if len(p.Info().Peers) == 1 && p.Info().Peers[0].Meta[p.idKey] == p.id && !p.peerIsPresent(p.Info().State.Primary) {
+			p.log.Info("singleton takeover: old primary gone, claiming primary role", "fn", "evalInitClusterState")
+			p.updatingState = &State{
+				Generation: p.Info().State.Generation + 1,
+				Primary:    p.self,
+				Singleton:  true,
+				InitWAL:    p.Info().State.InitWAL,
+				Freeze:     NewFreezeDetails("singleton takeover"),
+			}
+			if err := p.putClusterState(); err != nil {
+				p.log.Error("failed to write singleton takeover state", "fn", "evalInitClusterState", "err", err)
+				p.evalLater(1 * time.Second)
+				return
+			}
+			info := *p.Info()
+			info.State = p.updatingState
+			p.setInfo(info)
+			p.updatingState = nil
+			p.triggerEval()
+			return
+		}
 		p.assumeUnassigned()
 		return
 	}

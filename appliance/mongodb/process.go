@@ -194,7 +194,7 @@ func (p *Process) getReplConfig() (*replSetConfig, error) {
 	var result struct {
 		Config replSetConfig `bson:"config"`
 	}
-	if session.Run(bson.D{{"replSetGetConfig", 1}}, &result); err != nil {
+	if err := session.Run(bson.D{{"replSetGetConfig", 1}}, &result); err != nil {
 		return nil, err
 	}
 	return &result.Config, nil
@@ -207,7 +207,7 @@ func (p *Process) setReplConfig(config replSetConfig) error {
 	}
 	defer session.Close()
 
-	if session.Run(bson.D{{"replSetReconfig", config}, {"force", true}}, nil); err != nil {
+	if err := session.Run(bson.D{{"replSetReconfig", config}, {"force", true}}, nil); err != nil {
 		return err
 	}
 	// XXX(jpg): Prevent mongodb implosion if a reconfigure comes too soon after this one
@@ -560,7 +560,8 @@ func (p *Process) initPrimaryDB(clusterState *state.State) error {
 			logger.Error("error initialising replset", "err", err)
 			return err
 		}
-
+		// Give MongoDB time to process the initiation before proceeding
+		time.Sleep(2 * time.Second)
 	}
 	logger.Info("getting current replset config")
 	replSetCurrent, err := p.getReplConfig()
@@ -597,6 +598,19 @@ func (p *Process) replSetInitiate() error {
 		},
 	}, nil)
 	if err != nil {
+		// Code 23 = AlreadyInitialized: the replica set was previously initialized
+		// (possibly with a stale member IP). This is not fatal; the subsequent
+		// replSetReconfig in initPrimaryDB will fix the member list.
+		if merr, ok := err.(*mgo.QueryError); ok && merr.Code == 23 {
+			logger.Info("replica set already initialized, will reconfig", "err", err)
+			return nil
+		}
+		// EOF/io errors can occur when replSetInitiate succeeds and MongoDB
+		// closes the connection during the election transition.
+		if err.Error() == "EOF" || err.Error() == "end of file" {
+			logger.Info("connection closed during replSetInitiate (likely successful)")
+			return nil
+		}
 		logger.Error("failed to initialise replica set", "err", err)
 		return err
 	}
@@ -866,7 +880,7 @@ func (p *Process) waitForSync(downstream *discoverd.Instance) {
 
 // DialInfo returns dial info for connecting to the local process as the "flynn" user.
 func (p *Process) DialInfo() *mgo.DialInfo {
-	localhost := net.JoinHostPort("localhost", p.Port)
+	localhost := net.JoinHostPort("127.0.0.1", p.Port)
 	info := &mgo.DialInfo{
 		Addrs:   []string{localhost},
 		Timeout: 5 * time.Second,
@@ -925,8 +939,6 @@ type configData struct {
 var configTemplate = template.Must(template.New("mongod.conf").Parse(`
 storage:
   dbPath: {{.DataDir}}
-  journal:
-    enabled: true
   engine: wiredTiger
   wiredTiger:
     engineConfig:
@@ -939,6 +951,7 @@ storage:
 
 net:
   port: {{.Port}}
+  bindIpAll: true
 
 {{if .SecurityEnabled}}
 security:
@@ -949,6 +962,5 @@ security:
 {{if .ReplicationEnabled}}
 replication:
   replSetName: rs0
-  enableMajorityReadConcern: true
 {{end}}
 `[1:]))

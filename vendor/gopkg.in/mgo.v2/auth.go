@@ -113,49 +113,11 @@ func (socket *mongoSocket) getNonce() (nonce string, err error) {
 }
 
 func (socket *mongoSocket) resetNonce() {
-	debugf("Socket %p to %s: requesting a new nonce", socket, socket.addr)
-	op := &queryOp{}
-	op.query = &getNonceCmd{GetNonce: 1}
-	op.collection = "admin.$cmd"
-	op.limit = -1
-	op.replyFunc = func(err error, reply *replyOp, docNum int, docData []byte) {
-		if err != nil {
-			socket.kill(errors.New("getNonce: "+err.Error()), true)
-			return
-		}
-		result := &getNonceResult{}
-		err = bson.Unmarshal(docData, &result)
-		if err != nil {
-			socket.kill(errors.New("Failed to unmarshal nonce: "+err.Error()), true)
-			return
-		}
-		debugf("Socket %p to %s: nonce unmarshalled: %#v", socket, socket.addr, result)
-		if result.Code == 13390 {
-			// mongos doesn't yet support auth (see http://j.mp/mongos-auth)
-			result.Nonce = "mongos"
-		} else if result.Nonce == "" {
-			var msg string
-			if result.Err != "" {
-				msg = fmt.Sprintf("Got an empty nonce: %s (%d)", result.Err, result.Code)
-			} else {
-				msg = "Got an empty nonce"
-			}
-			socket.kill(errors.New(msg), true)
-			return
-		}
-		socket.Lock()
-		if socket.cachedNonce != "" {
-			socket.Unlock()
-			panic("resetNonce: nonce already cached")
-		}
-		socket.cachedNonce = result.Nonce
-		socket.gotNonce.Signal()
-		socket.Unlock()
-	}
-	err := socket.Query(op)
-	if err != nil {
-		socket.kill(errors.New("resetNonce: "+err.Error()), true)
-	}
+	debugf("Socket %p to %s: skipping getNonce (not needed for SCRAM-SHA-1)", socket, socket.addr)
+	socket.Lock()
+	socket.cachedNonce = "mongos"
+	socket.gotNonce.Signal()
+	socket.Unlock()
 }
 
 func (socket *mongoSocket) Login(cred Credential) error {
