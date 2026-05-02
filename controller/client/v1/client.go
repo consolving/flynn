@@ -624,7 +624,7 @@ func (c *Client) StreamJobEvents(appID string, output chan *ct.Job) (stream.Stre
 }
 
 func (c *Client) WatchJobEvents(appID, releaseID string) (ct.JobWatcher, error) {
-	events := make(chan *ct.Job)
+	events := make(chan *ct.Job, 100)
 	stream, err := c.StreamJobEvents(appID, events)
 	if err != nil {
 		return nil, err

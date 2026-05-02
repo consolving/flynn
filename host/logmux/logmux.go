@@ -44,6 +44,9 @@ type Mux struct {
 	// following a job, in order to wait on the appropriate group from jobWaits,
 	// as a WaitGroup can't be waited until the counter is >0
 	jobStarts map[string]chan struct{}
+	// jobDones tracks jobs whose log streams have all closed, so that
+	// late subscribers can detect that the job is already done
+	jobDones map[string]struct{}
 
 	subscribersMtx sync.RWMutex
 	subscribers    map[string]map[chan message]struct{}
@@ -61,6 +64,7 @@ func New(hostID, logDir string, logger log15.Logger) *Mux {
 		logger:      logger,
 		jobWaits:    make(map[string]*sync.WaitGroup),
 		jobStarts:   make(map[string]chan struct{}),
+		jobDones:    make(map[string]struct{}),
 		subscribers: make(map[string]map[chan message]struct{}),
 		appLogs:     make(map[string]*appLog),
 	}
@@ -319,6 +323,7 @@ func (m *Mux) Follow(r io.ReadCloser, buffer string, msgID logagg.MsgID, config 
 			m.jobsMtx.Lock()
 			defer m.jobsMtx.Unlock()
 			delete(m.jobWaits, config.JobID)
+			m.jobDones[config.JobID] = struct{}{}
 		}()
 	}
 
@@ -403,14 +408,18 @@ func (m *Mux) StreamLog(appID, jobID string, history, follow bool, ch chan<- *rf
 }
 
 // jobDoneCh returns a channel that is closed when all of the streams we are
-// following from the job have been closed. It will never unblock if the job has
-// already finished.
+// following from the job have been closed.
 func (m *Mux) jobDoneCh(jobID string, stop <-chan struct{}) <-chan struct{} {
 	ch := make(chan struct{})
 	go func() {
 		defer close(ch)
 		var started chan struct{}
 		m.jobsMtx.Lock()
+		// check if the job has already completed
+		if _, done := m.jobDones[jobID]; done {
+			m.jobsMtx.Unlock()
+			return
+		}
 		// check if there is already a WaitGroup
 		wg, ok := m.jobWaits[jobID]
 		if !ok {
@@ -449,6 +458,7 @@ func (m *Mux) jobDoneCh(jobID string, stop <-chan struct{}) <-chan struct{} {
 }
 
 func (m *Mux) followLog(appID, jobID string, ch chan<- *rfc5424.Message) (stream.Stream, error) {
+	m.logger.Info("followLog starting", "app.id", appID, "job.id", jobID)
 	s := stream.New()
 	var jobDone <-chan struct{}
 	if jobID != "" {

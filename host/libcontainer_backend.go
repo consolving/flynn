@@ -1161,7 +1161,11 @@ func (c *Container) watch(ready chan<- error, buffer host.LogBuffer) error {
 		log.Warn("error subscribing to OOM notifications (non-fatal)", "err", err)
 	} else {
 		go func() {
-			logger := c.l.LogMux.Logger(logagg.MsgIDInit, c.MuxConfig, "component", "flynn-host")
+			// Use a separate config so the OOM logger's Follow() does not
+			// add to the job's WaitGroup (which tracks stdio stream closure).
+			oomConfig := *c.MuxConfig
+			oomConfig.JobID = c.job.ID + ".oom"
+			logger := c.l.LogMux.Logger(logagg.MsgIDInit, &oomConfig, "component", "flynn-host")
 			defer logger.Close()
 			for range notifyOOM {
 				logger.Crit("FATAL: a container process was killed due to lack of available memory")
@@ -1397,14 +1401,21 @@ func (l *LibcontainerBackend) Attach(req *AttachRequest) (err error) {
 	}
 
 	defer func() {
-		if client != nil && (req.Job.Job.Config.TTY || req.Stream) && err == io.EOF {
-			<-client.done
+		if (req.Job.Job.Config.TTY || req.Stream) && err == io.EOF {
+			if client != nil {
+				<-client.done
+			}
 			job := l.State.GetJob(req.Job.Job.ID)
+			if job == nil {
+				return
+			}
 			if job.Status == host.StatusDone || job.Status == host.StatusCrashed {
 				err = ExitError(*job.ExitStatus)
 				return
 			}
-			err = errors.New(*job.Error)
+			if job.Error != nil {
+				err = errors.New(*job.Error)
+			}
 		}
 	}()
 
@@ -1485,8 +1496,10 @@ func (l *LibcontainerBackend) Attach(req *AttachRequest) (err error) {
 	}
 
 	ch := make(chan *rfc5424.Message)
+	l.Logger.Info("streaming log for attached job", "fn", "Attach", "job.id", req.Job.Job.ID, "logs", req.Logs, "stream", req.Stream)
 	stream, err := l.LogMux.StreamLog(req.Job.Job.Metadata["flynn-controller.app"], req.Job.Job.ID, req.Logs, req.Stream, ch)
 	if err != nil {
+		l.Logger.Error("StreamLog error", "fn", "Attach", "job.id", req.Job.Job.ID, "err", err)
 		return err
 	}
 	defer stream.Close()
@@ -1508,6 +1521,7 @@ func (l *LibcontainerBackend) Attach(req *AttachRequest) (err error) {
 			return nil
 		}
 	}
+	l.Logger.Info("log stream ended for attached job", "fn", "Attach", "job.id", req.Job.Job.ID)
 
 	return io.EOF
 }
