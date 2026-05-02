@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.title }} - {{ site.title }}</title>
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a href="{{ '/' | relative_url }}" class="site-title">Flynn</a>
+      <nav class="site-nav">
+        <a href="{{ '/docs/installation/' | relative_url }}">Docs</a>
+        <a href="https://github.com/consolving/flynn">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    {{ content }}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Flynn is a community-maintained open-source PaaS. <a href="https://github.com/consolving/flynn">Source on GitHub</a>.</p>
+    </div>
+  </footer>
+</body>
+</html>

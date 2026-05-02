@@ -1,0 +1,10 @@
+<nav class="docs-nav">
+{% for section in site.nav %}
+  <h3>{{ section.title }}</h3>
+  <ul>
+  {% for item in section.children %}
+    <li><a href="{{ item.url | relative_url }}"{% if page.url == item.url %} class="active"{% endif %}>{{ item.title }}</a></li>
+  {% endfor %}
+  </ul>
+{% endfor %}
+</nav>

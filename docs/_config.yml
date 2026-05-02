@@ -1,0 +1,64 @@
+title: Flynn Documentation
+description: Flynn is an open-source PaaS for running applications in production
+baseurl: "/flynn"
+url: "https://consolving.github.io"
+theme: minima
+
+markdown: kramdown
+highlighter: rouge
+
+permalink: pretty
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - DEVELOPER_PLAN.md
+  - notes-tuf-setup.md
+  - STEP_BY_STEP_TUF.md
+  - TUF_QUICKSTART.md
+  - TUF_SETUP.md
+  - TUF-CREATION-GUIDE.md
+  - api-examples/
+  - "._*"
+
+collections:
+  docs:
+    output: true
+    permalink: /docs/:path/
+
+defaults:
+  - scope:
+      path: "_docs"
+      type: "docs"
+    values:
+      layout: "doc"
+
+nav:
+  - title: Getting Started
+    children:
+      - title: Installation
+        url: /docs/installation/
+      - title: Basics
+        url: /docs/basics/
+  - title: Using Flynn
+    children:
+      - title: Apps
+        url: /docs/apps/
+      - title: Databases
+        url: /docs/databases/
+      - title: Docker
+        url: /docs/docker/
+      - title: CLI
+        url: /docs/cli/
+  - title: Operating
+    children:
+      - title: Production
+        url: /docs/production/
+      - title: Security
+        url: /docs/security/
+  - title: Reference
+    children:
+      - title: Architecture
+        url: /docs/architecture/
+      - title: Contributing
+        url: /docs/contributing/

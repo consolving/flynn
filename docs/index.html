@@ -1,0 +1,36 @@
+---
+layout: default
+title: Flynn - Open Source PaaS
+---
+<div class="hero">
+  <h1>Flynn</h1>
+  <p>An open-source platform as a service (PaaS) for running applications in production. Deploy apps with git push, manage databases, and scale effortlessly.</p>
+  <a href="{{ '/docs/installation/' | relative_url }}" class="btn">Get Started</a>
+</div>
+
+<div class="features">
+  <div class="feature">
+    <h3>Git Deploy</h3>
+    <p>Push code with <code>git push flynn master</code>. Flynn builds, deploys, and routes traffic to your app automatically.</p>
+  </div>
+  <div class="feature">
+    <h3>Managed Databases</h3>
+    <p>Built-in PostgreSQL 16, MariaDB 10.11, MongoDB 4.4, and Redis with automatic provisioning and high availability.</p>
+  </div>
+  <div class="feature">
+    <h3>Docker Support</h3>
+    <p>Deploy any Docker image with <code>flynn docker push</code>. No Dockerfile required for buildpack-compatible apps.</p>
+  </div>
+  <div class="feature">
+    <h3>Zero-Downtime Deploys</h3>
+    <p>Rolling deployments with health checks ensure your app stays available during updates.</p>
+  </div>
+  <div class="feature">
+    <h3>Service Discovery</h3>
+    <p>Built-in service discovery and routing. Apps find each other automatically via discoverd.</p>
+  </div>
+  <div class="feature">
+    <h3>Horizontal Scaling</h3>
+    <p>Scale any process type with a single command. The scheduler distributes work across your cluster.</p>
+  </div>
+</div>
