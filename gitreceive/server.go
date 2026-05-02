@@ -379,7 +379,11 @@ func initRepo(path string) error {
 }
 
 func writeRepoHook(path string) error {
-	return os.WriteFile(filepath.Join(path, ".git", "hooks", "pre-receive"), prereceiveHook, 0755)
+	hooksDir := filepath.Join(path, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(hooksDir, "pre-receive"), prereceiveHook, 0755)
 }
 
 func setGitConfig(path string) error {
