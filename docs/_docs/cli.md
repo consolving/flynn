@@ -7,15 +7,45 @@ The `flynn` command-line tool manages apps, deployments, and cluster configurati
 
 ## Installation
 
+Download the latest release from the [GitHub releases page](https://github.com/consolving/flynn/releases).
+
+Binaries are available for the following platforms:
+
+| Platform | File |
+|----------|------|
+| Linux (amd64) | `flynn-cli-linux-amd64.gz` |
+| Linux (arm64) | `flynn-cli-linux-arm64.gz` |
+| macOS (Intel) | `flynn-cli-darwin-amd64.gz` |
+| macOS (Apple Silicon) | `flynn-cli-darwin-arm64.gz` |
+| Windows (amd64) | `flynn-cli-windows-amd64.exe.gz` |
+
+### Linux / macOS
+
+Replace `<VERSION>` with the desired release tag (e.g. `v20260503.0`) and `<PLATFORM>` with the appropriate file name:
+
 ```bash
+VERSION="v20260503.0"
+
 # Linux amd64
-curl -fsSL https://github.com/consolving/flynn/releases/download/v20260416.0/flynn-cli-linux-amd64.gz | \
+curl -fsSL "https://github.com/consolving/flynn/releases/download/${VERSION}/flynn-cli-linux-amd64.gz" | \
   gunzip > flynn && chmod +x flynn && sudo mv flynn /usr/local/bin/
 
-# macOS amd64
-curl -fsSL https://github.com/consolving/flynn/releases/download/v20260416.0/flynn-cli-darwin-amd64.gz | \
+# Linux arm64
+curl -fsSL "https://github.com/consolving/flynn/releases/download/${VERSION}/flynn-cli-linux-arm64.gz" | \
+  gunzip > flynn && chmod +x flynn && sudo mv flynn /usr/local/bin/
+
+# macOS (Intel)
+curl -fsSL "https://github.com/consolving/flynn/releases/download/${VERSION}/flynn-cli-darwin-amd64.gz" | \
+  gunzip > flynn && chmod +x flynn && sudo mv flynn /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -fsSL "https://github.com/consolving/flynn/releases/download/${VERSION}/flynn-cli-darwin-arm64.gz" | \
   gunzip > flynn && chmod +x flynn && sudo mv flynn /usr/local/bin/
 ```
+
+### Windows
+
+Download `flynn-cli-windows-amd64.exe.gz` from the [releases page](https://github.com/consolving/flynn/releases), extract it, and add the resulting `flynn-cli-windows-amd64.exe` to your PATH.
 
 ## Cluster Configuration
 
