@@ -1,5 +1,7 @@
 package mongodb
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 // Config structures
 
 type replSetMember struct {
@@ -33,8 +35,8 @@ const (
 )
 
 type replSetOptime struct {
-	Timestamp int64 `bson:"ts"`
-	Term      int64 `bson:"t"`
+	Timestamp primitive.Timestamp `bson:"ts"`
+	Term      int64               `bson:"t"`
 }
 
 type replSetStatusMember struct {

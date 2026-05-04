@@ -917,7 +917,7 @@ func (p *Process) XLogPosition() (xlog.Position, error) {
 func (p *Process) xlogPosFromStatus(member string, status *replSetStatus) (xlog.Position, error) {
 	for _, m := range status.Members {
 		if m.Name == member {
-			return xlog.Position(strconv.FormatInt(m.Optime.Timestamp, 10)), nil
+			return xlog.Position(strconv.FormatUint(uint64(m.Optime.Timestamp.T)<<32|uint64(m.Optime.Timestamp.I), 10)), nil
 		}
 	}
 	return p.XLog().Zero(), fmt.Errorf("error getting xlog, couldn't find member in replSetStatus")
