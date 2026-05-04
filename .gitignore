@@ -8,3 +8,5 @@ demo/*.log
 /build
 ._*
 *.backup
+flynn-mongodb
+flynn-mongodb-api
