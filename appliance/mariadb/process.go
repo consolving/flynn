@@ -266,7 +266,11 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 		return err
 	}
 
-	if err := p.start(); err != nil {
+	// MariaDB 10.11+ defaults root to unix_socket auth. Since flynn-mariadb
+	// runs as OS user "mysql" (not root), root cannot authenticate via TCP
+	// or socket (SO_PEERCRED UID mismatch). Start with --skip-grant-tables
+	// to bypass auth, create the flynn user, then restart normally.
+	if err := p.start("--skip-grant-tables"); err != nil {
 		return err
 	}
 
@@ -274,6 +278,17 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 		if e := p.stop(); err != nil {
 			logger.Debug("ignoring error stopping process", "err", e)
 		}
+		return err
+	}
+
+	// Restart without --skip-grant-tables now that the flynn user exists.
+	logger.Info("restarting with grant tables enabled")
+	if err := p.stop(); err != nil {
+		logger.Error("error stopping process for restart", "err", err)
+		return err
+	}
+
+	if err := p.start(); err != nil {
 		return err
 	}
 
@@ -465,8 +480,7 @@ func (p *Process) assumeStandby(upstream, downstream *discoverd.Instance) error 
 
 		// Install semi-sync slave plugin. Ignore error if already installed.
 		if _, err := db.Exec(`INSTALL PLUGIN rpl_semi_sync_slave SONAME 'semisync_slave.so'`); err != nil && MySQLErrorNumber(err) != 1968 {
-			logger.Error("error installing rpl_semi_sync_slave", "err", err)
-			return err
+			logger.Debug("skipping semi-sync slave plugin install (may be built-in)", "err", err)
 		}
 
 		// Enable semi-synchronous on slave.
@@ -521,20 +535,40 @@ func (p *Process) initPrimaryDB() error {
 	logger := p.Logger.New("fn", "initPrimaryDB")
 	logger.Info("initializing primary database")
 
-	dsn := &DSN{
-		Host:    "127.0.0.1:" + p.Port,
-		User:    "root",
-		Timeout: p.OpTimeout,
-	}
-
-	db, err := sql.Open("mysql", dsn.String())
+	// Connect as root during initial setup (server is running with
+	// --skip-grant-tables, so any credentials are accepted). We use root
+	// instead of flynn because flynn doesn't exist yet.
+	dsnStr := fmt.Sprintf("root@tcp(127.0.0.1:%s)/?timeout=%s", p.Port, p.OpTimeout)
+	db, err := sql.Open("mysql", dsnStr)
 	if err != nil {
 		logger.Error("error acquiring connection", "err", err)
 		return err
 	}
 	defer db.Close()
 
-	if _, err := db.Exec(fmt.Sprintf(`CREATE USER 'flynn'@'%%' IDENTIFIED BY '%s'`, p.Password)); err != nil && MySQLErrorNumber(err) != 1396 {
+	// Force a single connection and keep it for all operations.
+	// After FLUSH PRIVILEGES re-enables auth, new connections would fail
+	// (root uses unix_socket auth in MariaDB 10.11+), but existing
+	// connections remain valid.
+	db.SetMaxOpenConns(1)
+
+	// FLUSH PRIVILEGES re-enables the privilege system (needed after
+	// --skip-grant-tables). Without this, CREATE USER/GRANT fail with
+	// error 1290. The current connection remains valid after flush.
+	if _, err := db.Exec(`FLUSH PRIVILEGES`); err != nil {
+		logger.Error("error flushing privileges", "err", err)
+		return err
+	}
+
+	// Remove anonymous users that interfere with authentication.
+	// MariaDB's auth matching prefers ''@'localhost' over 'flynn'@'%',
+	// causing "Access denied" for flynn connections from localhost.
+	if _, err := db.Exec(`DELETE FROM mysql.user WHERE user = ''`); err != nil {
+		logger.Error("error removing anonymous users", "err", err)
+		return err
+	}
+
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS 'flynn'@'%%' IDENTIFIED BY '%s'`, p.Password)); err != nil {
 		logger.Error("error creating database user", "err", err)
 		return err
 	}
@@ -542,9 +576,15 @@ func (p *Process) initPrimaryDB() error {
 		logger.Error("error granting privileges", "err", err)
 		return err
 	}
-	if _, err := db.Exec(`INSTALL PLUGIN rpl_semi_sync_master SONAME 'semisync_master.so'`); err != nil && MySQLErrorNumber(err) != 1968 {
-		logger.Error("error installing rpl_semi_sync_master", "err", err)
+	if _, err := db.Exec(`FLUSH PRIVILEGES`); err != nil {
+		logger.Error("error flushing privileges after user changes", "err", err)
 		return err
+	}
+	if _, err := db.Exec(`INSTALL PLUGIN rpl_semi_sync_master SONAME 'semisync_master.so'`); err != nil && MySQLErrorNumber(err) != 1968 {
+		// In MariaDB 10.3+ semi-sync is built into the server; the plugin
+		// .so may not exist. Log but don't fail — SET GLOBAL commands below
+		// will work regardless since the feature is compiled in.
+		logger.Debug("skipping semi-sync master plugin install (may be built-in)", "err", err)
 	}
 	if _, err := db.Exec(`FLUSH PRIVILEGES`); err != nil {
 		logger.Error("error flushing privileges", "err", err)
@@ -618,9 +658,10 @@ func (p *Process) waitForUpstream(upstream *discoverd.Instance) error {
 }
 
 func (p *Process) connectLocal() (*sql.DB, error) {
+	// MariaDB 10.11+ uses unix_socket auth for root. Since flynn-mariadb
+	// runs as user "mysql", we can't authenticate as MySQL root. Use the
+	// flynn user (which has ALL PRIVILEGES WITH GRANT OPTION) instead.
 	dsn := p.DSN()
-	dsn.User = "root"
-	dsn.Password = ""
 
 	db, err := sql.Open("mysql", dsn.String())
 	if err != nil {
@@ -629,11 +670,13 @@ func (p *Process) connectLocal() (*sql.DB, error) {
 	return db, nil
 }
 
-func (p *Process) start() error {
+func (p *Process) start(extraArgs ...string) error {
 	logger := p.Logger.New("fn", "start", "id", p.ID, "port", p.Port)
 	logger.Info("starting process")
 
-	cmd := NewCmd(exec.Command(filepath.Join(p.SbinDir, "mysqld"), "--defaults-extra-file="+p.ConfigPath()))
+	args := []string{"--defaults-extra-file=" + p.ConfigPath()}
+	args = append(args, extraArgs...)
+	cmd := NewCmd(exec.Command(filepath.Join(p.SbinDir, "mysqld"), args...))
 	if err := cmd.Start(); err != nil {
 		logger.Error("failed to start process", "err", err)
 		return err
@@ -650,6 +693,17 @@ func (p *Process) start() error {
 
 	logger.Debug("waiting for process to start")
 
+	// Determine which connection to use for health check.
+	// When running with --skip-grant-tables, connect as root (no password)
+	// since the flynn user doesn't exist yet.
+	skipGrant := false
+	for _, a := range extraArgs {
+		if a == "--skip-grant-tables" {
+			skipGrant = true
+			break
+		}
+	}
+
 	timer := time.NewTimer(p.OpTimeout)
 	defer timer.Stop()
 
@@ -657,7 +711,14 @@ func (p *Process) start() error {
 		// Connect to server.
 		// Retry after sleep if an error occurs.
 		if err := func() error {
-			db, err := p.connectLocal()
+			var db *sql.DB
+			var err error
+			if skipGrant {
+				dsn := fmt.Sprintf("root@tcp(127.0.0.1:%s)/?timeout=%s", p.Port, p.OpTimeout)
+				db, err = sql.Open("mysql", dsn)
+			} else {
+				db, err = p.connectLocal()
+			}
 			if err != nil {
 				return err
 			}
@@ -924,7 +985,6 @@ func (p *Process) installDB() error {
 	p.runCmd(exec.Command(
 		filepath.Join(p.BinDir, "mysql_install_db"),
 		"--defaults-extra-file="+p.ConfigPath(),
-		"--auth-root-authentication-method=normal",
 	))
 
 	return nil
@@ -968,7 +1028,7 @@ user         = ""
 port         = {{.Port}}
 bind_address = 0.0.0.0
 server_id    = {{.ServerID}}
-socket       = ""
+socket       = {{.DataDir}}/mysqld.sock
 pid_file     = {{.DataDir}}/mysql.pid
 report_host  = {{.ID}}
 
