@@ -176,18 +176,12 @@ else
 fi
 
 ## Buildpack compile
-if [[ -n "${envdir}" ]]; then
-  run_unprivileged ${selected_buildpack}/bin/compile \
-    "${build_dir}" \
-    "${cache_root}" \
-    "${env_dir}" \
-    | ensure_indent
-else
-  run_unprivileged ${selected_buildpack}/bin/compile \
-    "${build_dir}" \
-    "${cache_root}" \
-    | ensure_indent
-fi
+mkdir -p "${env_dir}"
+run_unprivileged ${selected_buildpack}/bin/compile \
+  "${build_dir}" \
+  "${cache_root}" \
+  "${env_dir}" \
+  | ensure_indent
 
 run_unprivileged ${selected_buildpack}/bin/release \
   "${build_dir}" \
