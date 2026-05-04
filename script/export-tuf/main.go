@@ -887,8 +887,9 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 		},
 		{
-			Name: "gitreceive",
-			Base: "ubuntu-noble",
+			Name:          "gitreceive",
+			Base:          "ubuntu-noble",
+			PackageScript: "gitreceive/img/packages.sh",
 			Binaries: map[string]string{
 				"gitreceived":    "/bin/gitreceived",
 				"flynn-receiver": "/bin/flynn-receiver",
@@ -911,8 +912,9 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 		},
 		{
-			Name: "taffy",
-			Base: "ubuntu-noble",
+			Name:          "taffy",
+			Base:          "ubuntu-noble",
+			PackageScript: "taffy/img/packages.sh",
 			Binaries: map[string]string{
 				"taffy":          "/bin/taffy",
 				"flynn-receiver": "/bin/flynn-receiver",
