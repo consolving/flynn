@@ -1,4 +1,3 @@
-//go:build linux
 // +build linux
 
 package fs
@@ -271,9 +270,7 @@ func (m *Manager) Set(container *configs.Config) error {
 		}
 	}
 
-	// CheckCpushares reads cpu.shares which only exists on cgroups v1.
-	// On cgroups v2, cpu.weight is used instead and is already set by CpuGroupV2.Set().
-	if m.Paths["cpu"] != "" && !cgroups.IsCgroup2UnifiedMode() {
+	if m.Paths["cpu"] != "" {
 		if err := CheckCpushares(m.Paths["cpu"], container.Cgroups.Resources.CpuShares); err != nil {
 			return err
 		}

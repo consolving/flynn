@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,8 +18,9 @@ import (
 	"github.com/flynn/flynn/pkg/sirenia/scale"
 	"github.com/julienschmidt/httprouter"
 	"github.com/inconshreveable/log15"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var app = os.Getenv("FLYNN_APP_ID")
@@ -69,6 +71,18 @@ func (a *API) logger() log15.Logger {
 	return log15.New("app", "mongodb-web")
 }
 
+func connectAdmin() (*mongo.Client, error) {
+	ctx := context.Background()
+	opts := options.Client().
+		SetHosts([]string{net.JoinHostPort(serviceHost, "27017")}).
+		SetAuth(options.Credential{
+			AuthSource: "admin",
+			Username:   "flynn",
+			Password:   os.Getenv("MONGO_PWD"),
+		})
+	return mongo.Connect(ctx, opts)
+}
+
 func (a *API) createDatabase(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Ensure the cluster has been scaled up before attempting to create a database.
 	if err := a.scaleUp(); err != nil {
@@ -76,28 +90,24 @@ func (a *API) createDatabase(w http.ResponseWriter, req *http.Request, _ httprou
 		return
 	}
 
-	session, err := mgo.DialWithInfo(&mgo.DialInfo{
-		Addrs:    []string{net.JoinHostPort(serviceHost, "27017")},
-		Username: "flynn",
-		Password: os.Getenv("MONGO_PWD"),
-		Database: "admin",
-	})
+	ctx := context.Background()
+	client, err := connectAdmin()
 	if err != nil {
 		httphelper.Error(w, err)
 		return
 	}
-	defer session.Close()
+	defer client.Disconnect(ctx)
 
 	username, password, database := random.Hex(16), random.Hex(16), random.Hex(16)
 
 	// Create a user
-	if err := session.DB(database).Run(bson.D{
-		{"createUser", username},
-		{"pwd", password},
-		{"roles", []bson.M{
+	if err := client.Database(database).RunCommand(ctx, bson.D{
+		{Key: "createUser", Value: username},
+		{Key: "pwd", Value: password},
+		{Key: "roles", Value: []bson.M{
 			{"role": "dbOwner", "db": database},
 		}},
-	}, nil); err != nil {
+	}).Err(); err != nil {
 		httphelper.Error(w, err)
 		return
 	}
@@ -124,26 +134,22 @@ func (a *API) dropDatabase(w http.ResponseWriter, req *http.Request, _ httproute
 	}
 	user, database := id[0], id[1]
 
-	session, err := mgo.DialWithInfo(&mgo.DialInfo{
-		Addrs:    []string{net.JoinHostPort(serviceHost, "27017")},
-		Username: "flynn",
-		Password: os.Getenv("MONGO_PWD"),
-		Database: "admin",
-	})
+	ctx := context.Background()
+	client, err := connectAdmin()
 	if err != nil {
 		httphelper.Error(w, err)
 		return
 	}
-	defer session.Close()
+	defer client.Disconnect(ctx)
 
 	// Delete user.
-	if err := session.DB(database).Run(bson.D{{"dropUser", user}}, nil); err != nil {
+	if err := client.Database(database).RunCommand(ctx, bson.D{{Key: "dropUser", Value: user}}).Err(); err != nil {
 		httphelper.Error(w, err)
 		return
 	}
 
 	// Delete database.
-	if err := session.DB(database).Run(bson.D{{"dropDatabase", 1}}, nil); err != nil {
+	if err := client.Database(database).RunCommand(ctx, bson.D{{Key: "dropDatabase", Value: 1}}).Err(); err != nil {
 		httphelper.Error(w, err)
 		return
 	}
@@ -171,17 +177,13 @@ func (a *API) ping(w http.ResponseWriter, req *http.Request, _ httprouter.Params
 		}
 	}
 
-	session, err := mgo.DialWithInfo(&mgo.DialInfo{
-		Addrs:    []string{net.JoinHostPort(serviceHost, "27017")},
-		Username: "flynn",
-		Password: os.Getenv("MONGO_PWD"),
-		Database: "admin",
-	})
+	ctx := context.Background()
+	client, err := connectAdmin()
 	if err != nil {
 		httphelper.Error(w, err)
 		return
 	}
-	defer session.Close()
+	defer client.Disconnect(ctx)
 
 	w.WriteHeader(200)
 }

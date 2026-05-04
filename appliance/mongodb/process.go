@@ -1,6 +1,7 @@
 package mongodb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,8 +22,10 @@ import (
 	"github.com/flynn/flynn/pkg/sirenia/state"
 	"github.com/flynn/flynn/pkg/sirenia/xlog"
 	"github.com/inconshreveable/log15"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 const (
@@ -184,30 +187,30 @@ func (p *Process) XLog() xlog.XLog {
 
 func (p *Process) getReplConfig() (*replSetConfig, error) {
 	// Connect to local server.
-	session, err := p.connectLocal()
+	client, err := p.connectLocal()
 	if err != nil {
 		return nil, err
 	}
-	defer session.Close()
+	defer client.Disconnect(context.Background())
 
 	// Retrieve replica set configuration.
 	var result struct {
 		Config replSetConfig `bson:"config"`
 	}
-	if err := session.Run(bson.D{{"replSetGetConfig", 1}}, &result); err != nil {
+	if err := client.Database("admin").RunCommand(context.Background(), bson.D{{Key: "replSetGetConfig", Value: 1}}).Decode(&result); err != nil {
 		return nil, err
 	}
 	return &result.Config, nil
 }
 
 func (p *Process) setReplConfig(config replSetConfig) error {
-	session, err := p.connectLocal()
+	client, err := p.connectLocal()
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer client.Disconnect(context.Background())
 
-	if err := session.Run(bson.D{{"replSetReconfig", config}, {"force", true}}, nil); err != nil {
+	if err := client.Database("admin").RunCommand(context.Background(), bson.D{{Key: "replSetReconfig", Value: config}, {Key: "force", Value: true}}).Err(); err != nil {
 		return err
 	}
 	// XXX(jpg): Prevent mongodb implosion if a reconfigure comes too soon after this one
@@ -422,32 +425,32 @@ func (p *Process) assumeStandby(upstream, downstream *discoverd.Instance) error 
 }
 
 func (p *Process) replSetGetStatus() (*replSetStatus, error) {
-	session, err := p.connectLocal()
+	client, err := p.connectLocal()
 	if err != nil {
 		return nil, err
 	}
-	defer session.Close()
+	defer client.Disconnect(context.Background())
 
-	return replSetGetStatusQuery(session)
+	return replSetGetStatusQuery(client)
 }
 
-func replSetGetStatusQuery(session *mgo.Session) (*replSetStatus, error) {
+func replSetGetStatusQuery(c *mongo.Client) (*replSetStatus, error) {
 	var status replSetStatus
-	err := session.DB("admin").Run(bson.D{{"replSetGetStatus", 1}}, &status)
+	err := c.Database("admin").RunCommand(context.Background(), bson.D{{Key: "replSetGetStatus", Value: 1}}).Decode(&status)
 	return &status, err
 }
 
 func (p *Process) isReplInitialised() (bool, error) {
 	_, err := p.replSetGetStatus()
 	if err != nil {
-		if merr, ok := err.(*mgo.QueryError); ok {
-			switch merr.Code {
+		if cerr, ok := err.(mongo.CommandError); ok {
+			switch cerr.Code {
 			case 93: // replica set exists but is invalid/we aren't a member
 				return true, nil
 			case 94: // replica set not yet configured
 				return false, nil
 			}
-			p.Logger.Error("failed to check if replset initialized", "err", err, "code", merr.Code)
+			p.Logger.Error("failed to check if replset initialized", "err", err, "code", cerr.Code)
 			return false, err
 		}
 		return false, err
@@ -456,43 +459,45 @@ func (p *Process) isReplInitialised() (bool, error) {
 }
 
 func (p *Process) isUserCreated() (bool, error) {
-	session, err := mgo.DialWithInfo(p.DialInfo())
+	ctx := context.Background()
+	client, err := mongo.Connect(ctx, p.ClientOptions())
 	if err != nil {
 		return false, err
 	}
-	defer session.Close()
+	defer client.Disconnect(ctx)
 
-	session.SetMode(mgo.Monotonic, true)
-
-	n, err := session.DB("admin").C("system.users").Find(bson.M{"user": "flynn"}).Count()
+	var result struct {
+		Users []struct {
+			User string `bson:"user"`
+		} `bson:"users"`
+	}
+	err = client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: bson.D{{Key: "user", Value: "flynn"}, {Key: "db", Value: "admin"}}}}).Decode(&result)
 	if err != nil {
-		if merr, ok := err.(*mgo.QueryError); ok && merr.Code == 13 {
+		if cerr, ok := err.(mongo.CommandError); ok && cerr.Code == 13 {
 			return false, nil
 		}
 		return false, err
 	}
-	return n > 0, nil
+	return len(result.Users) > 0, nil
 }
 
 func (p *Process) createUser() error {
-	// create a new session
-	session, err := mgo.DialWithInfo(p.DialInfo())
+	ctx := context.Background()
+	client, err := mongo.Connect(ctx, p.ClientOptions())
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer client.Disconnect(ctx)
 
-	session.SetMode(mgo.Monotonic, true)
-
-	if err := session.DB("admin").Run(bson.D{
-		{"createUser", "flynn"},
-		{"pwd", p.Password},
-		{"roles", []bson.M{{"role": "root", "db": "admin"}, {"role": "dbOwner", "db": "admin"}}},
-	}, nil); err != nil {
+	if err := client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "createUser", Value: "flynn"},
+		{Key: "pwd", Value: p.Password},
+		{Key: "roles", Value: []bson.M{{"role": "root", "db": "admin"}, {"role": "dbOwner", "db": "admin"}}},
+	}).Err(); err != nil {
 		return err
 	}
 
-	if err := session.DB("admin").Run(bson.D{{"fsync", 1}}, nil); err != nil {
+	if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "fsync", Value: 1}}).Err(); err != nil {
 		return err
 	}
 
@@ -583,25 +588,25 @@ func (p *Process) initPrimaryDB(clusterState *state.State) error {
 func (p *Process) replSetInitiate() error {
 	logger := p.Logger.New("fn", "replSetInitiate")
 	logger.Info("initialising replica set")
-	session, err := p.connectLocal()
+	client, err := p.connectLocal()
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer client.Disconnect(context.Background())
 
 	logger.Info("initialising replica set")
-	err = session.Run(bson.M{
+	err = client.Database("admin").RunCommand(context.Background(), bson.M{
 		"replSetInitiate": replSetConfig{
 			ID:      "rs0",
 			Members: []replSetMember{{ID: 0, Host: p.addr(), Priority: 1}},
 			Version: 1,
 		},
-	}, nil)
+	}).Err()
 	if err != nil {
 		// Code 23 = AlreadyInitialized: the replica set was previously initialized
 		// (possibly with a stale member IP). This is not fatal; the subsequent
 		// replSetReconfig in initPrimaryDB will fix the member list.
-		if merr, ok := err.(*mgo.QueryError); ok && merr.Code == 23 {
+		if cerr, ok := err.(mongo.CommandError); ok && cerr.Code == 23 {
 			logger.Info("replica set already initialized, will reconfig", "err", err)
 			return nil
 		}
@@ -621,13 +626,13 @@ func (p *Process) addr() string {
 	return net.JoinHostPort(p.Host, p.Port)
 }
 
-func (p *Process) connectLocal() (*mgo.Session, error) {
-	session, err := mgo.DialWithInfo(p.DialInfo())
+func (p *Process) connectLocal() (*mongo.Client, error) {
+	ctx := context.Background()
+	client, err := mongo.Connect(ctx, p.ClientOptions())
 	if err != nil {
 		return nil, err
 	}
-	session.SetMode(mgo.Eventual, true)
-	return session, nil
+	return client, nil
 }
 
 func (p *Process) start() error {
@@ -658,13 +663,15 @@ func (p *Process) start() error {
 		// Connect to server.
 		// Retry after sleep if an error occurs.
 		if err := func() error {
-			session, err := mgo.DialWithInfo(p.DialInfo())
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			client, err := mongo.Connect(ctx, p.ClientOptions())
 			if err != nil {
 				return err
 			}
-			defer session.Close()
+			defer client.Disconnect(ctx)
 
-			return nil
+			return client.Ping(ctx, readpref.Primary())
 		}(); err != nil {
 			select {
 			case <-timer.C:
@@ -692,9 +699,10 @@ func (p *Process) stop() error {
 	p.cancelSyncWait()
 
 	logger.Info("attempting graceful shutdown")
-	session, err := p.connectLocal()
+	client, err := p.connectLocal()
 	if err == nil {
-		err := session.DB("admin").Run(bson.D{{"shutdown", 1}, {"force", true}}, nil)
+		defer client.Disconnect(context.Background())
+		err := client.Database("admin").RunCommand(context.Background(), bson.D{{Key: "shutdown", Value: 1}, {Key: "force", Value: true}}).Err()
 		if err == nil || err == io.EOF {
 			select {
 			case <-time.After(p.OpTimeout):
@@ -766,11 +774,11 @@ func (p *Process) userExists() (bool, error) {
 		return false, errors.New("mongod is not running")
 	}
 
-	session, err := p.connectLocal()
+	client, err := p.connectLocal()
 	if err != nil {
 		return false, err
 	}
-	defer session.Close()
+	defer client.Disconnect(context.Background())
 
 	type user struct {
 		ID       string `bson:"_id"`
@@ -783,7 +791,7 @@ func (p *Process) userExists() (bool, error) {
 		Ok    int    `bson:"ok"`
 	}
 
-	if err := session.DB("admin").Run(bson.D{{"usersInfo", bson.M{"user": "flynn", "db": "admin"}}}, &userInfo); err != nil {
+	if err := client.Database("admin").RunCommand(context.Background(), bson.D{{Key: "usersInfo", Value: bson.M{"user": "flynn", "db": "admin"}}}).Decode(&userInfo); err != nil {
 		return false, err
 	}
 
@@ -803,7 +811,7 @@ func (p *Process) waitForSyncInner(downstream *discoverd.Instance, stopCh, doneC
 	logger := p.Logger.New(
 		"fn", "waitForSync",
 		"sync_name", downstream.Meta["MONGODB_ID"],
-		"start_time", log15.Lazy{func() time.Time { return startTime }},
+		"start_time", log15.Lazy{Fn: func() time.Time { return startTime }},
 	)
 
 	logger.Info("waiting for downstream replication to catch up")
@@ -878,22 +886,24 @@ func (p *Process) waitForSync(downstream *discoverd.Instance) {
 	go p.waitForSyncInner(downstream, stopCh, doneCh)
 }
 
-// DialInfo returns dial info for connecting to the local process as the "flynn" user.
-func (p *Process) DialInfo() *mgo.DialInfo {
+// ClientOptions returns client options for connecting to the local process as the "flynn" user.
+func (p *Process) ClientOptions() *options.ClientOptions {
 	localhost := net.JoinHostPort("127.0.0.1", p.Port)
-	info := &mgo.DialInfo{
-		Addrs:   []string{localhost},
-		Timeout: 5 * time.Second,
-		Direct:  true,
-	}
+	opts := options.Client().
+		SetHosts([]string{localhost}).
+		SetConnectTimeout(5 * time.Second).
+		SetDirect(true).
+		SetReadPreference(readpref.Nearest())
 
 	if p.securityEnabled() {
-		info.Addrs = []string{p.addr()}
-		info.Database = "admin"
-		info.Username = "flynn"
-		info.Password = p.Password
+		opts.SetHosts([]string{p.addr()})
+		opts.SetAuth(options.Credential{
+			AuthSource: "admin",
+			Username:   "flynn",
+			Password:   p.Password,
+		})
 	}
-	return info
+	return opts
 }
 
 func (p *Process) XLogPosition() (xlog.Position, error) {

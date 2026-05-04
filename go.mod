@@ -25,7 +25,7 @@ require (
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/groupcache v0.0.0-20160803200408-a6b377e3400b
 	github.com/golang/protobuf v1.4.1
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/hashicorp/raft v0.0.0-20160603202243-4bcac2adb069
 	github.com/hashicorp/raft-boltdb v0.0.0-20150201200839-d1e82c1ec3f1
@@ -50,6 +50,7 @@ require (
 	github.com/stevvooe/resumable v0.0.0-20150521211217-51ad44105773
 	github.com/tent/canonical-json-go v0.0.0-20130607151641-96e4ba3a7613
 	github.com/vishvananda/netlink v0.0.0-20170502164845-1e045880fbc2
+	go.mongodb.org/mongo-driver v1.17.9
 	golang.org/x/crypto v0.28.0
 	golang.org/x/net v0.30.0
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
@@ -58,7 +59,9 @@ require (
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013
 	google.golang.org/grpc v1.27.0
 	google.golang.org/protobuf v1.24.0
-	gopkg.in/mgo.v2 v2.0.0-20160609180028-29cc868a5ca6
+	gopkg.in/inconshreveable/go-update.v0 v0.0.0-20150814200126-d8b0b1d421aa
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v0.0.0-20181223230014-1083505acf35
 )
 
@@ -72,6 +75,7 @@ require (
 	github.com/go-ini/ini v1.12.0 // indirect
 	github.com/go-stack/stack v1.7.0 // indirect
 	github.com/godbus/dbus v4.1.0+incompatible // indirect
+	github.com/golang/snappy v0.0.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c // indirect
@@ -79,10 +83,12 @@ require (
 	github.com/howeyc/fsnotify v0.0.0-20140711012604-6b1ef893dc11 // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jmespath/go-jmespath v0.0.0-20160202185014-0b12d6b521d8 // indirect
+	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/binarydist v0.1.0 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7 // indirect
+	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/mrunalp/fileutils v0.0.0-20171103030105-7d4729fb3618 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/olekukonko/ts v0.0.0-20140412220145-ecf753e7c962 // indirect
@@ -96,16 +102,18 @@ require (
 	github.com/smartystreets/goconvey v0.0.0-20190710185942-9d28bd7c0945 // indirect
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/vishvananda/netns v0.0.0-20170219233438-54f0e4339ce7 // indirect
+	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+	github.com/xdg-go/scram v1.1.2 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.opencensus.io v0.22.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
-	gopkg.in/inconshreveable/go-update.v0 v0.0.0-20150814200126-d8b0b1d421aa // indirect
 	gopkg.in/inconshreveable/log15.v2 v2.0.0-20180818164646-67afb5ed74ec // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20140529071818-c131134a1947 // indirect
 	gopkg.in/vmihailenco/msgpack.v2 v2.9.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	labix.org/v2/mgo v0.0.0-20140701140051-000000000287 // indirect
 )
 

@@ -1,14 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	ct "github.com/flynn/flynn/controller/types"
 	c "github.com/flynn/go-check"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type MongoDBSuite struct {
@@ -16,15 +18,6 @@ type MongoDBSuite struct {
 }
 
 var _ = c.ConcurrentSuite(&MongoDBSuite{})
-
-type mgoLogger struct {
-	t *c.C
-}
-
-func (l mgoLogger) Output(calldepth int, s string) error {
-	debugf(l.t, s)
-	return nil
-}
 
 func (s *MongoDBSuite) TestDumpRestore(t *c.C) {
 	r := s.newGitRepo(t, "empty")
@@ -56,19 +49,19 @@ var sireniaMongoDB = sireniaDatabase{
 	serviceKey: "FLYNN_MONGO",
 	hostKey:    "MONGO_HOST",
 	assertWriteable: func(t *c.C, r *ct.Release, d *sireniaDeploy) {
-		mgo.SetLogger(mgoLogger{t})
-		mgo.SetDebug(true)
-		session, err := mgo.DialWithInfo(&mgo.DialInfo{
-			Addrs:    []string{fmt.Sprintf("leader.%s.discoverd", d.name)},
-			Username: "flynn",
-			Password: r.Env["MONGO_PWD"],
-			Database: "admin",
-			Direct:   true,
-		})
-		session.SetMode(mgo.Monotonic, true)
-		defer session.Close()
+		ctx := context.Background()
+		client, err := mongo.Connect(ctx, options.Client().
+			SetHosts([]string{fmt.Sprintf("leader.%s.discoverd", d.name)}).
+			SetAuth(options.Credential{
+				AuthSource: "admin",
+				Username:   "flynn",
+				Password:   r.Env["MONGO_PWD"],
+			}).
+			SetDirect(true))
 		t.Assert(err, c.IsNil)
-		t.Assert(session.DB("test").C("test").Insert(&bson.M{"test": "test"}), c.IsNil)
+		defer client.Disconnect(ctx)
+		_, err = client.Database("test").Collection("test").InsertOne(ctx, bson.M{"test": "test"})
+		t.Assert(err, c.IsNil)
 	},
 }
 
