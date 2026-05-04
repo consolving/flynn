@@ -1,0 +1,186 @@
+#!/bin/bash
+
+set -e
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+usage() {
+  cat <<USAGE >&2
+usage: $0 [options]
+
+Run integration tests against an existing Vagrant-based Flynn cluster.
+
+Prerequisites:
+  - A running Flynn cluster (see ../vagrant/ in flynn-dev)
+  - ~/.flynnrc configured with the cluster (flynn cluster add)
+  - flynn CLI installed (e.g. /usr/local/bin/flynn)
+
+OPTIONS:
+  -h, --help               Show this message
+  -f, --filter=FILTER      Regular expression selecting which tests and/or suites to run
+  -s, --stream             Stream debug output
+  -d, --debug              Enable debug output
+  -c, --concurrency=N      Max concurrent tests [default: 1]
+  -b, --build              Build test binary and CLI before running [default: true]
+  -r, --router-ip=IP       Router IP address [default: from flynnrc or 192.168.50.11]
+      --cli=PATH           Path to flynn CLI [default: /usr/local/bin/flynn]
+      --no-build            Skip building test binary
+USAGE
+}
+
+main() {
+  local filter=""
+  local stream=""
+  local debug=""
+  local concurrency="1"
+  local build=true
+  local router_ip=""
+  local cli="/usr/local/bin/flynn"
+
+  while true; do
+    case "$1" in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      -f | --filter)
+        if [[ -z "$2" ]]; then
+          echo "ERROR: --filter requires an argument" >&2
+          exit 1
+        fi
+        filter="$2"
+        shift 2
+        ;;
+      -s | --stream)
+        stream="--stream"
+        shift
+        ;;
+      -d | --debug)
+        debug="--debug"
+        shift
+        ;;
+      -c | --concurrency)
+        if [[ -z "$2" ]]; then
+          echo "ERROR: --concurrency requires an argument" >&2
+          exit 1
+        fi
+        concurrency="$2"
+        shift 2
+        ;;
+      -b | --build)
+        build=true
+        shift
+        ;;
+      --no-build)
+        build=false
+        shift
+        ;;
+      -r | --router-ip)
+        if [[ -z "$2" ]]; then
+          echo "ERROR: --router-ip requires an argument" >&2
+          exit 1
+        fi
+        router_ip="$2"
+        shift 2
+        ;;
+      --cli)
+        if [[ -z "$2" ]]; then
+          echo "ERROR: --cli requires an argument" >&2
+          exit 1
+        fi
+        cli="$2"
+        shift 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    usage
+    exit 1
+  fi
+
+  # Determine router IP from flynnrc if not specified
+  if [[ -z "${router_ip}" ]]; then
+    if [[ -f "${HOME}/.flynnrc" ]]; then
+      # Extract domain from ControllerURL, e.g. controller.192.168.50.11.nip.io → 192.168.50.11
+      router_ip=$(grep -m1 'ControllerURL' "${HOME}/.flynnrc" | sed -E 's|.*controller\.([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\..*|\1|')
+    fi
+    if [[ -z "${router_ip}" ]]; then
+      router_ip="192.168.50.11"
+    fi
+  fi
+
+  # Verify prerequisites
+  if [[ ! -f "${HOME}/.flynnrc" ]]; then
+    echo "ERROR: ~/.flynnrc not found. Run 'flynn cluster add' first." >&2
+    exit 1
+  fi
+
+  if ! command -v "${cli}" &>/dev/null; then
+    echo "ERROR: flynn CLI not found at ${cli}" >&2
+    exit 1
+  fi
+
+  # Verify cluster is reachable
+  echo "==> Checking cluster connectivity (router IP: ${router_ip})..."
+  if ! "${cli}" cluster 2>/dev/null | grep -q "${router_ip}"; then
+    echo "WARNING: flynnrc may not be configured for router IP ${router_ip}" >&2
+  fi
+
+  local test_binary="${ROOT}/build/bin/flynn-test"
+
+  # Build test binary and CLI if requested
+  if ${build}; then
+    echo "==> Building test binary..."
+    mkdir -p "${ROOT}/build/bin"
+    go build -o "${test_binary}" "${ROOT}/test"
+
+    # Build CLI if not already at the expected path
+    if [[ "${cli}" == "${ROOT}/build/bin/flynn" ]] || [[ ! -x "${cli}" ]]; then
+      echo "==> Building flynn CLI..."
+      go build -o "${ROOT}/build/bin/flynn" "${ROOT}/cli"
+      cli="${ROOT}/build/bin/flynn"
+    fi
+  fi
+
+  if [[ ! -x "${test_binary}" ]]; then
+    echo "ERROR: Test binary not found at ${test_binary}. Run with --build or build manually." >&2
+    exit 1
+  fi
+
+  # Ensure test-apps.json exists
+  if [[ ! -f "${ROOT}/build/image/test-apps.json" ]]; then
+    echo "WARNING: build/image/test-apps.json not found. Tests requiring test apps will fail." >&2
+  fi
+
+  # Build test args
+  local test_args=(
+    "--router-ip" "${router_ip}"
+    "--cli" "${cli}"
+    "--concurrency" "${concurrency}"
+  )
+
+  if [[ -n "${filter}" ]]; then
+    test_args+=("--run" "${filter}")
+  fi
+  if [[ -n "${stream}" ]]; then
+    test_args+=("${stream}")
+  fi
+  if [[ -n "${debug}" ]]; then
+    test_args+=("${debug}")
+  fi
+
+  echo "==> Running integration tests..."
+  echo "    Router IP:   ${router_ip}"
+  echo "    CLI:         ${cli}"
+  echo "    Filter:      ${filter:-<all>}"
+  echo "    Concurrency: ${concurrency}"
+  echo ""
+
+  exec "${test_binary}" "${test_args[@]}"
+}
+
+main "$@"
