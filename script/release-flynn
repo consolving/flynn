@@ -23,7 +23,7 @@ usage: $0 [options]
 OPTIONS:
   -h, --help              Show this message
   -c, --commit COMMIT     The git commit to build (takes precedence over the --branch flag)
-  -b, --branch BRANCH     The git branch to build [default: master]
+  -b, --branch BRANCH     The git branch to build [default: main]
   -v, --version VERSION   Version to use [default: vYYYYMMDD.N]
   -b, --bucket BUCKET     The S3 bucket to upload packages to [default: flynn]
   -d, --domain DOMAIN     The CloudFront domain [default: dl.flynn.io]
@@ -38,7 +38,7 @@ USAGE
 
 main() {
   local commit=""
-  local branch="master"
+  local branch="main"
   local version=""
   local bucket="flynn"
   local domain="dl.flynn.io"
@@ -125,7 +125,7 @@ main() {
     exit 1
   fi
 
-  if [[ -z "${commit}" ]] && [[ "${branch}" = "master" ]]; then
+  if [[ -z "${commit}" ]] && [[ "${branch}" = "main" ]]; then
     nightly=true
   fi
 

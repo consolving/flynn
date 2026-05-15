@@ -318,7 +318,7 @@ func (s *CLISuite) TestRunNoImage(t *c.C) {
 	t.Assert(cmd, OutputContains, "App release has no image, push a release first")
 
 	// command should work after push
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	cmd = r.flynn("run", "env")
 	t.Assert(cmd, Succeeds)
 	t.Assert(cmd, OutputContains, "FOO=BAR")
@@ -983,7 +983,7 @@ func (s *CLISuite) TestExportImport(t *c.C) {
 	assertExportContains(t, file, "app.json", "routes.json", "release.json")
 
 	// release the app and provision some dbs
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.flynn("resource", "add", "postgres"), Succeeds)
 	t.Assert(r.flynn("pg", "psql", "--", "-c",
 		"CREATE table foos (data text); INSERT INTO foos (data) VALUES ('foobar')"), Succeeds)
@@ -1045,7 +1045,7 @@ func (s *CLISuite) TestExportBuildpackOutput(t *c.C) {
 	t.Assert(r.git("commit", "-m", "echo script"), Succeeds)
 
 	// release the app
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// check that exporting the app works
 	t.Assert(r.flynn("export", "-f", "/dev/null"), Succeeds)
@@ -1080,7 +1080,7 @@ func (s *CLISuite) TestDeploy(t *c.C) {
 	// create and push app
 	r := s.newGitRepo(t, "http")
 	t.Assert(r.flynn("create", "deploy-"+random.String(8)), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	deploy := r.flynn("deployment")
 	t.Assert(deploy, Succeeds)
@@ -1103,9 +1103,9 @@ func (s *CLISuite) TestReleaseDelete(t *c.C) {
 	r := s.newGitRepo(t, "http")
 	app := "release-delete-" + random.String(8)
 	t.Assert(r.flynn("create", app), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.git("commit", "--allow-empty", "--message", "empty commit"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// get the releases
 	client := s.controllerClient(t)
@@ -1156,7 +1156,7 @@ func (s *CLISuite) TestReleaseRollback(t *c.C) {
 	r := s.newGitRepo(t, "http")
 	app := "release-rollback-" + random.String(8)
 	t.Assert(r.flynn("create", app), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// check that rollback fails when there's only a single release
 	res := r.flynn("release", "rollback", "--yes")
@@ -1164,7 +1164,7 @@ func (s *CLISuite) TestReleaseRollback(t *c.C) {
 
 	// create a second release
 	t.Assert(r.git("commit", "--allow-empty", "--message", "empty commit"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// get the releases
 	client := s.controllerClient(t)

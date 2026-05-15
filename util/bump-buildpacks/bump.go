@@ -67,7 +67,7 @@ func getMaster(repo string) string {
 		log.Fatal(err)
 	}
 
-	refURL := fmt.Sprintf("https://api.github.com/repos%s/git/refs/heads/master", strings.TrimSuffix(u.Path, ".git"))
+	refURL := fmt.Sprintf("https://api.github.com/repos%s/git/refs/heads/main", strings.TrimSuffix(u.Path, ".git"))
 	res, err := http.Get(refURL)
 	if err != nil {
 		log.Fatal(err)

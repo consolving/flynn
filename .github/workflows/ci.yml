@@ -11,9 +11,9 @@ name: CI
 
 on:
   push:
-    branches: [tuf-rebuild, master, go-1.22-upgrade, debian13-cgroups-v2-bootstrap]
+    branches: [tuf-rebuild, main, go-1.22-upgrade, debian13-cgroups-v2-bootstrap]
   pull_request:
-    branches: [tuf-rebuild, master, debian13-cgroups-v2-bootstrap]
+    branches: [tuf-rebuild, main, debian13-cgroups-v2-bootstrap]
   workflow_dispatch:
 
 jobs:

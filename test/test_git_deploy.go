@@ -39,7 +39,7 @@ func (s *GitDeploySuite) TestEnvDir(t *c.C) {
 	t.Assert(r.flynn("create"), Succeeds)
 	t.Assert(r.flynn("env", "set", "FOO=bar", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, SuccessfulOutputContains, "bar")
 }
 
@@ -48,7 +48,7 @@ func (s *GitDeploySuite) TestEmptyRelease(t *c.C) {
 	t.Assert(r.flynn("create"), Succeeds)
 	t.Assert(r.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, Succeeds)
 
 	run := r.flynn("run", "echo", "foo")
@@ -64,12 +64,12 @@ func (s *GitDeploySuite) TestAppRecreation(t *c.C) {
 	r := s.newGitRepo(t, "empty")
 	t.Assert(r.flynn("create", "-y", "app-recreation"), Succeeds)
 	r.git("commit", "-m", "bump", "--allow-empty")
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.flynn("delete", "-y"), Succeeds)
 
 	// recreate app and push again, it should work
 	t.Assert(r.flynn("create", "-y", "app-recreation"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.flynn("delete", "-y"), Succeeds)
 }
 
@@ -108,9 +108,9 @@ func (s *GitDeploySuite) TestStaticBuildpack(t *c.C) {
 func (s *GitDeploySuite) TestPushTwice(t *c.C) {
 	r := s.newGitRepo(t, "https://github.com/flynn-examples/nodejs-flynn-example")
 	t.Assert(r.flynn("create"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.git("commit", "-m", "second", "--allow-empty"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 }
 
 func (s *GitDeploySuite) runBuildpackTest(t *c.C, name string, resources []string) {
@@ -130,10 +130,10 @@ func (s *GitDeploySuite) runBuildpackTestWithResponsePattern(t *c.C, name string
 	t.Assert(err, c.IsNil)
 	defer watcher.Close()
 
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, SuccessfulOutputContains, "Creating release")
 	t.Assert(push, SuccessfulOutputContains, "Scaling initial release to web=1")
-	t.Assert(push, SuccessfulOutputContains, "* [new branch]      master -> master")
+	t.Assert(push, SuccessfulOutputContains, "* [new branch]      main -> main")
 	t.Assert(push, SuccessfulOutputContains, "Initial web job started")
 	t.Assert(push, SuccessfulOutputContains, "Application deployed")
 
@@ -180,7 +180,7 @@ func (s *GitDeploySuite) runBuildpackTestWithResponsePattern(t *c.C, name string
 func (s *GitDeploySuite) TestRunQuoting(t *c.C) {
 	r := s.newGitRepo(t, "empty")
 	t.Assert(r.flynn("create"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	run := r.flynn("run", "bash", "-c", "echo 'foo bar'")
 	t.Assert(run, Succeeds)
@@ -193,7 +193,7 @@ func (s *GitDeploySuite) TestRunQuoting(t *c.C) {
 func (s *GitDeploySuite) TestConfigDir(t *c.C) {
 	r := s.newGitRepo(t, "config-dir")
 	t.Assert(r.flynn("create"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 }
 
 // TestLargeRepo ensures that there is no regression for https://github.com/flynn/flynn/issues/1799
@@ -214,7 +214,7 @@ func (s *GitDeploySuite) TestLargeRepo(t *c.C) {
 	t.Assert(r.git("add", "random"), Succeeds)
 	t.Assert(r.git("commit", "-m", "data"), Succeeds)
 	t.Assert(r.flynn("create"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), OutputContains, "Unable to select a buildpack")
+	t.Assert(r.git("push", "flynn", "main"), OutputContains, "Unable to select a buildpack")
 }
 
 func (s *GitDeploySuite) TestPrivateSSHKeyClone(t *c.C) {
@@ -222,7 +222,7 @@ func (s *GitDeploySuite) TestPrivateSSHKeyClone(t *c.C) {
 	t.Assert(r.flynn("create"), Succeeds)
 	t.Assert(r.flynn("env", "set", "BUILDPACK_URL=git@github.com:kr/heroku-buildpack-inline.git"), Succeeds)
 
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, Succeeds)
 }
 
@@ -240,12 +240,12 @@ func (s *GitDeploySuite) TestGitSubmodules(t *c.C) {
 
 	t.Assert(r.git("commit", "-am", "Add Submodule"), Succeeds)
 	t.Assert(r.flynn("create"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.flynn("run", "ls", "go-flynn-example"), SuccessfulOutputContains, "main.go")
 
 	// deploy again to test cached repo
 	t.Assert(r.git("commit", "-m", "foo", "--allow-empty"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	t.Assert(r.flynn("run", "ls", "go-flynn-example"), SuccessfulOutputContains, "main.go")
 }
 
@@ -259,7 +259,7 @@ func (s *GitDeploySuite) TestCancel(t *c.C) {
 	t.Assert(err, c.IsNil)
 
 	// start push
-	cmd := exec.Command("git", "push", "flynn", "master")
+	cmd := exec.Command("git", "push", "flynn", "main")
 	// put the command in its own process group (to emulate the way shells handle Ctrl-C)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Dir = r.dir
@@ -314,7 +314,7 @@ func (s *GitDeploySuite) TestCrashingApp(t *c.C) {
 	t.Assert(r.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
 	// check the push is rejected as the job won't start
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, c.Not(Succeeds))
 	t.Assert(push, OutputContains, "web job failed to start")
 
@@ -329,19 +329,19 @@ func (s *GitDeploySuite) TestCrashingApp(t *c.C) {
 func (s *GitDeploySuite) TestSlugignore(t *c.C) {
 	r := s.newGitRepo(t, "slugignore")
 	t.Assert(r.flynn("create", "slugignore"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	run := r.flynn("run", "ls")
 	t.Assert(run, Succeeds)
 	t.Assert(run, Outputs, "existing\n")
 }
 
-func (s *GitDeploySuite) TestNonMasterPush(t *c.C) {
+func (s *GitDeploySuite) TestNonMainPush(t *c.C) {
 	r := s.newGitRepo(t, "empty")
 	t.Assert(r.flynn("create"), Succeeds)
-	push := r.git("push", "flynn", "master:foo")
+	push := r.git("push", "flynn", "main:foo")
 	t.Assert(push, c.Not(Succeeds))
-	t.Assert(push, OutputContains, "push must include a change to the master branch")
+	t.Assert(push, OutputContains, "push must include a change to the main branch")
 }
 
 func (s *GitDeploySuite) TestProcfileChange(t *c.C) {
@@ -350,18 +350,18 @@ func (s *GitDeploySuite) TestProcfileChange(t *c.C) {
 		name := "procfile-change-" + strategy
 		t.Assert(r.flynn("create", name), Succeeds)
 		t.Assert(s.controllerClient(t).UpdateApp(&ct.App{ID: name, Strategy: strategy}), c.IsNil)
-		t.Assert(r.git("push", "flynn", "master"), Succeeds)
+		t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 		// add a new web process type
 		t.Assert(r.sh("echo new-web: http >> Procfile"), Succeeds)
 		t.Assert(r.git("commit", "-a", "-m", "add new-web process"), Succeeds)
-		t.Assert(r.git("push", "flynn", "master"), Succeeds)
+		t.Assert(r.git("push", "flynn", "main"), Succeeds)
 		t.Assert(r.flynn("scale", "new-web=1"), Succeeds)
 
 		// remove the new web process type
 		t.Assert(r.sh("sed -i '/new-web: http/d' Procfile"), Succeeds)
 		t.Assert(r.git("commit", "-a", "-m", "remove new-web process"), Succeeds)
-		t.Assert(r.git("push", "flynn", "master"), Succeeds)
+		t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	}
 }
 
@@ -369,7 +369,7 @@ func (s *GitDeploySuite) TestCustomPort(t *c.C) {
 	r := s.newGitRepo(t, "http")
 	name := "custom-port"
 	t.Assert(r.flynn("create", name), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// Update release with a different port
 	cc := s.controllerClient(t)
@@ -384,7 +384,7 @@ func (s *GitDeploySuite) TestCustomPort(t *c.C) {
 
 	// Deploy again, check that port stays the same
 	t.Assert(r.git("commit", "-m", "foo", "--allow-empty"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	release, err = cc.GetAppRelease(app.ID)
 	t.Assert(err, c.IsNil)
 	t.Assert(release.Processes["web"].Ports[0].Port, c.Equals, 9090)
@@ -394,7 +394,7 @@ func (s *GitDeploySuite) TestDevStdout(t *c.C) {
 	r := s.newGitRepo(t, "empty-release")
 	t.Assert(r.flynn("create"), Succeeds)
 	t.Assert(r.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// check slug jobs can write to /dev/stdout and /dev/stderr
 	for _, dev := range []string{"/dev/stdout", "/dev/stderr"} {
@@ -430,6 +430,6 @@ func (s *GitDeploySuite) TestSourceVersion(t *c.C) {
 	commit := strings.TrimSpace(res.Output)
 	t.Assert(commit, c.HasLen, 40)
 
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, SuccessfulOutputContains, fmt.Sprintf("SOURCE_VERSION: %s", commit))
 }

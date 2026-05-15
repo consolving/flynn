@@ -27,7 +27,7 @@ func (s *GitreceiveSuite) TestRepoCaching(t *c.C) {
 
 	r.git("commit", "-m", "bump", "--allow-empty")
 	r.git("commit", "-m", "bump", "--allow-empty")
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, Succeeds)
 	t.Assert(push, c.Not(OutputContains), "cached")
 
@@ -38,7 +38,7 @@ func (s *GitreceiveSuite) TestRepoCaching(t *c.C) {
 	t.Assert(err, c.IsNil)
 
 	r.git("commit", "-m", "bump", "--allow-empty")
-	push = r.git("push", "flynn", "master", "--progress")
+	push = r.git("push", "flynn", "main", "--progress")
 	// should only contain one object
 	t.Assert(push, SuccessfulOutputContains, "Counting objects: 1, done.")
 }
@@ -53,14 +53,14 @@ func (s *GitreceiveSuite) TestSlugbuilderLimit(t *c.C) {
 	t.Assert(r.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 	t.Assert(r.flynn("-a", "gitreceive", "env", "set", "SLUGBUILDER_DEFAULT_MEMORY_LIMIT=2GB"), Succeeds)
 
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, Succeeds)
 	t.Assert(push, OutputContains, "2147483648")
 
 	t.Assert(r.flynn("limit", "set", "slugbuilder", "memory=500MB"), Succeeds)
 
 	t.Assert(r.git("commit", "-m", "bump", "--allow-empty"), Succeeds)
-	push = r.git("push", "flynn", "master")
+	push = r.git("push", "flynn", "main")
 	t.Assert(push, Succeeds)
 	t.Assert(push, OutputContains, "524288000")
 
@@ -112,7 +112,7 @@ func (s *GitreceiveSuite) TestGitReleaseMeta(t *c.C) {
 	t.Assert(r.flynn("create", app), Succeeds)
 
 	t.Assert(r.git("commit", "-m", "bump", "--allow-empty"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	release, err := x.controller.GetAppRelease(app)
 	t.Assert(err, c.IsNil)

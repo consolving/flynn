@@ -650,6 +650,7 @@ func (h *Helper) newGitRepoWithTrace(t *c.C, nameOrURL string, trace bool) *gitR
 	}
 
 	t.Assert(r.git("init"), Succeeds)
+	t.Assert(r.git("branch", "-m", "main"), Succeeds)
 	t.Assert(r.git("add", "."), Succeeds)
 	t.Assert(r.git("commit", "-am", "init"), Succeeds)
 	return r

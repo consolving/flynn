@@ -72,7 +72,7 @@ func (s *TaffyDeploySuite) TestDeploys(t *c.C) {
 	github := map[string]string{
 		"user":      "flynn-examples",
 		"repo":      "nodejs-flynn-example",
-		"branch":    "master",
+		"branch":    "main",
 		"rev":       "5e177fec38fbde7d0a03e9e8dccf8757c68caa11",
 		"clone_url": "https://github.com/flynn-examples/nodejs-flynn-example.git",
 	}
@@ -147,7 +147,7 @@ func (s *TaffyDeploySuite) TestPrivateDeploys(t *c.C) {
 	github := map[string]string{
 		"user":      "flynn-examples",
 		"repo":      "nodejs-flynn-example",
-		"branch":    "master",
+		"branch":    "main",
 		"rev":       "5e177fec38fbde7d0a03e9e8dccf8757c68caa11",
 		"clone_url": "git@github.com:/flynn-examples/nodejs-flynn-example.git",
 	}

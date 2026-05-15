@@ -113,7 +113,7 @@ Database appliances have not been cloned, provision them now if
 necessary with 'flynn -c ${dst_cluster} -a ${dst_app} resource add ...'.
 
 Run 'flynn -c ${dst_cluster} -a ${dst_app} remote add <remote>' to add a git remote for
-the new app and then 'git push <remote> master' to deploy the app.
+the new app and then 'git push <remote> main' to deploy the app.
 ========================
 
 INFO

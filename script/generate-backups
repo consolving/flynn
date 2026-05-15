@@ -177,7 +177,7 @@ git_deploy_app() {
   flynn create --yes "${app}"
 
   local out="${tmp}/git-push-${version}.txt"
-  if ! git push flynn master &> "${out}"; then
+  if ! git push flynn main &> "${out}"; then
     warn "git push failed:"
     cat "${out}"
     fail "git push failed"
