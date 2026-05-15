@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -57,22 +59,12 @@ func runDownload(args *docopt.Args) error {
 		return err
 	}
 
-	// create a TUF client and update it
+	// create a TUF client and update it, trying mirrors on network errors
 	log.Info("initializing TUF client")
 	tufDB := args.String["--tuf-db"]
-	local, err := tuf.FileLocalStore(tufDB)
+	repository := args.String["--repository"]
+	client, err := createTUFClientWithMirrors(tufDB, repository, "downloader", log)
 	if err != nil {
-		log.Error("error creating local TUF client", "err", err)
-		return err
-	}
-	remote, err := tuf.HTTPRemoteStore(args.String["--repository"], tufHTTPOpts("downloader"))
-	if err != nil {
-		log.Error("error creating remote TUF client", "err", err)
-		return err
-	}
-	client := tuf.NewClient(local, remote)
-	if err := updateTUFClient(client); err != nil {
-		log.Error("error updating TUF client", "err", err)
 		return err
 	}
 
@@ -177,4 +169,90 @@ func getChannelVersion(configDir string, client *tuf.Client, log log15.Logger) (
 	version = strings.TrimSpace(version)
 	log.Info(fmt.Sprintf("latest %s version is %s", channel, version))
 	return version, nil
+}
+
+// createTUFClientWithMirrors creates a TUF client, trying multiple mirrors
+// on network/timeout errors. If repository is explicitly set (not the default),
+// only that repository is tried. Otherwise, all mirrors from tufconfig.Mirrors
+// are tried in order.
+//
+// TUF verification errors are NOT retried — they indicate tampering or
+// misconfiguration, not a transient network issue.
+func createTUFClientWithMirrors(tufDB, repository, name string, log log15.Logger) (*tuf.Client, error) {
+	mirrors := tufconfig.Mirrors
+	if repository != tufconfig.Repository {
+		// User explicitly set --repository, only use that
+		mirrors = []string{repository}
+	}
+
+	var lastErr error
+	for i, mirror := range mirrors {
+		if i > 0 {
+			log.Info(fmt.Sprintf("trying mirror %s", mirror))
+		}
+
+		local, err := tuf.FileLocalStore(tufDB)
+		if err != nil {
+			return nil, fmt.Errorf("error creating local TUF store: %s", err)
+		}
+		remote, err := tuf.HTTPRemoteStore(mirror, tufHTTPOpts(name))
+		if err != nil {
+			return nil, fmt.Errorf("error creating remote TUF store for %s: %s", mirror, err)
+		}
+		client := tuf.NewClient(local, remote)
+		if err := updateTUFClient(client); err != nil {
+			if isNetworkError(err) && i < len(mirrors)-1 {
+				log.Warn("mirror unreachable, trying next", "mirror", mirror, "err", err)
+				lastErr = err
+				continue
+			}
+			log.Error("error updating TUF client", "mirror", mirror, "err", err)
+			return nil, err
+		}
+		if i > 0 {
+			log.Info(fmt.Sprintf("successfully connected to mirror %s", mirror))
+		}
+		return client, nil
+	}
+	return nil, fmt.Errorf("all mirrors failed, last error: %s", lastErr)
+}
+
+// isNetworkError returns true if the error is a transient network error
+// (connection refused, timeout, DNS failure, etc.) that warrants trying
+// another mirror. TUF signature verification errors return false.
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for net.Error (includes timeouts and connection errors)
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	// Check for DNS errors
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	// Check for connection refused / reset etc.
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	// Check error message for common network patterns
+	msg := err.Error()
+	for _, substr := range []string{
+		"connection refused",
+		"connection reset",
+		"no such host",
+		"i/o timeout",
+		"TLS handshake timeout",
+		"server misbehaving",
+		"network is unreachable",
+	} {
+		if strings.Contains(msg, substr) {
+			return true
+		}
+	}
+	return false
 }

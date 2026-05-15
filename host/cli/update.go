@@ -56,19 +56,13 @@ Please see the updating documentation at https://flynn.io/docs/production#backup
 func runUpdate(args *docopt.Args) error {
 	log := log15.New()
 
-	// create and update a TUF client
+	// create and update a TUF client, trying mirrors on network errors
 	log.Info("initializing TUF client")
-	local, err := tuf.FileLocalStore(args.String["--tuf-db"])
+	repository := args.String["--repository"]
+	client, err := createTUFClientWithMirrors(args.String["--tuf-db"], repository, "updater", log)
 	if err != nil {
-		log.Error("error creating local TUF client", "err", err)
 		return err
 	}
-	remote, err := tuf.HTTPRemoteStore(args.String["--repository"], tufHTTPOpts("updater"))
-	if err != nil {
-		log.Error("error creating remote TUF client", "err", err)
-		return err
-	}
-	client := tuf.NewClient(local, remote)
 
 	if !args.Bool["--is-latest"] {
 		return updateAndExecLatest(args.String["--config-dir"], client, log)
