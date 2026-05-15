@@ -432,10 +432,11 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 	}
 
 	// Pre-install commonly needed extensions in template1 so they are
-	// inherited by all databases created via CREATE DATABASE.  This is
-	// required because application database users are not superusers
-	// and cannot run CREATE EXTENSION themselves (pgextwlist is not
-	// available in the current packages layer).
+	// inherited by all databases created via CREATE DATABASE.  When
+	// pgextwlist is available, non-superuser app users can run CREATE
+	// EXTENSION themselves for whitelisted extensions, but we still
+	// pre-install uuid-ossp and pgcrypto since Flynn internals depend
+	// on them.
 	if extErr := p.installExtensionsInTemplate(); extErr != nil {
 		log.Error("error installing extensions in template1", "err", extErr)
 		return extErr
@@ -462,7 +463,8 @@ func (p *Process) assumePrimary(downstream *discoverd.Instance) (err error) {
 
 // installExtensionsInTemplate pre-installs commonly needed PostgreSQL
 // extensions in template1 so they are inherited by all databases
-// created via CREATE DATABASE.
+// created via CREATE DATABASE.  This ensures uuid-ossp and pgcrypto
+// are always available regardless of pgextwlist configuration.
 func (p *Process) installExtensionsInTemplate() error {
 	port, _ := strconv.Atoi(p.port)
 	templateDB, err := pgx.Connect(pgx.ConnConfig{
