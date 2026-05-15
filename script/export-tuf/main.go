@@ -115,7 +115,7 @@ func run() error {
 		version:        version,
 		layerCache:     layerCache,
 		tufRepoURL:     tufRepo,
-		layerURLTpl:    fmt.Sprintf("https://github.com/consolving/flynn-tuf-repo/releases/download/%s/{id}.squashfs", version),
+		layerURLTpl:    "https://dl.consolving.net/{id}.squashfs",
 		skipBaseLayers: skipBase,
 		pkgLayerDir:    pkgLayerDir,
 		baseLayers:     make(map[string][]*ct.ImageLayer),

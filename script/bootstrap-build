@@ -86,29 +86,35 @@ main() {
     -o "${output_dir}/flynn-host" ./host
   chmod +x "${output_dir}/flynn-host"
 
-  info "building flynn-init"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-init (CGO disabled — runs in containers)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-init" ./host/flynn-init
   chmod +x "${output_dir}/flynn-init"
 
-  info "building flynn-controller"
-  go build -mod=vendor -buildvcs=false \
+  # --- Container binaries (CGO_ENABLED=0 for static linking) ---
+  # These run inside containers with Ubuntu Noble base layers.
+  # Dynamic linking would fail due to glibc version mismatches.
+
+  info "building flynn-controller (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-controller" ./controller
   chmod +x "${output_dir}/flynn-controller"
 
-  info "building flynn-scheduler"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-scheduler (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-scheduler" ./controller/scheduler
   chmod +x "${output_dir}/flynn-scheduler"
 
-  info "building flynn-worker"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-worker (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-worker" ./controller/worker
   chmod +x "${output_dir}/flynn-worker"
+
+  # --- Host-only binaries (CGO allowed) ---
 
   info "building flynn CLI (linux-amd64)"
   GOOS=linux GOARCH=amd64 go build -mod=vendor -buildvcs=false \
@@ -117,145 +123,149 @@ main() {
   chmod +x "${output_dir}/flynn-linux-amd64"
   ln -nfs "flynn-linux-amd64" "${output_dir}/flynn"
 
-  info "building discoverd"
-  go build -mod=vendor -buildvcs=false \
+  # --- More container binaries (static) ---
+
+  info "building discoverd (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/discoverd" ./discoverd
   chmod +x "${output_dir}/discoverd"
 
-  info "building flynn-router"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-router (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-router" ./router
   chmod +x "${output_dir}/flynn-router"
 
-  info "building flynn-blobstore"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-blobstore (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-blobstore" ./blobstore
   chmod +x "${output_dir}/flynn-blobstore"
 
-  info "building logaggregator"
-  go build -mod=vendor -buildvcs=false \
+  info "building logaggregator (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/logaggregator" ./logaggregator
   chmod +x "${output_dir}/logaggregator"
 
-  # --- Additional component binaries for image building ---
+  # --- Additional container binaries for image building (static) ---
 
-  info "building flanneld"
-  go build -mod=vendor -buildvcs=false \
+  info "building flanneld (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flanneld" ./flannel
   chmod +x "${output_dir}/flanneld"
 
-  info "building flannel-wrapper"
-  go build -mod=vendor -buildvcs=false \
+  info "building flannel-wrapper (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flannel-wrapper" ./flannel/wrapper
   chmod +x "${output_dir}/flannel-wrapper"
 
-  info "building flynn-postgres"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-postgres (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-postgres" ./appliance/postgresql/cmd/flynn-postgres
   chmod +x "${output_dir}/flynn-postgres"
 
-  info "building flynn-postgres-api"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-postgres-api (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-postgres-api" ./appliance/postgresql/cmd/flynn-postgres-api
   chmod +x "${output_dir}/flynn-postgres-api"
 
-  info "building flynn-redis"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-redis (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-redis" ./appliance/redis/cmd/flynn-redis
   chmod +x "${output_dir}/flynn-redis"
 
-  info "building flynn-redis-api"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-redis-api (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-redis-api" ./appliance/redis/cmd/flynn-redis-api
   chmod +x "${output_dir}/flynn-redis-api"
 
-  info "building flynn-mariadb"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-mariadb (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-mariadb" ./appliance/mariadb/cmd/flynn-mariadb
   chmod +x "${output_dir}/flynn-mariadb"
 
-  info "building flynn-mariadb-api"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-mariadb-api (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-mariadb-api" ./appliance/mariadb/cmd/flynn-mariadb-api
   chmod +x "${output_dir}/flynn-mariadb-api"
 
-  info "building flynn-mongodb"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-mongodb (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-mongodb" ./appliance/mongodb/cmd/flynn-mongodb
   chmod +x "${output_dir}/flynn-mongodb"
 
-  info "building flynn-mongodb-api"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-mongodb-api (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-mongodb-api" ./appliance/mongodb/cmd/flynn-mongodb-api
   chmod +x "${output_dir}/flynn-mongodb-api"
 
-  info "building gitreceived"
-  go build -mod=vendor -buildvcs=false \
+  info "building gitreceived (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/gitreceived" ./gitreceive
   chmod +x "${output_dir}/gitreceived"
 
-  info "building flynn-receiver"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-receiver (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-receiver" ./gitreceive/receiver
   chmod +x "${output_dir}/flynn-receiver"
 
-  info "building tarreceive"
-  go build -mod=vendor -buildvcs=false \
+  info "building tarreceive (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/tarreceive" ./tarreceive
   chmod +x "${output_dir}/tarreceive"
 
-  info "building taffy"
-  go build -mod=vendor -buildvcs=false \
+  info "building taffy (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/taffy" ./taffy
   chmod +x "${output_dir}/taffy"
 
-  info "building create-artifact (slugbuilder)"
-  go build -mod=vendor -buildvcs=false \
+  info "building create-artifact (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/create-artifact" ./slugbuilder/artifact
   chmod +x "${output_dir}/create-artifact"
 
-  info "building slug-migrator (slugbuilder)"
-  go build -mod=vendor -buildvcs=false \
+  info "building slug-migrator (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/slug-migrator" ./slugbuilder/migrator
   chmod +x "${output_dir}/slug-migrator"
 
-  info "building flynn-status"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-status (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-status" ./status
   chmod +x "${output_dir}/flynn-status"
 
-  info "building updater"
-  go build -mod=vendor -buildvcs=false \
+  info "building updater (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/updater" ./updater
   chmod +x "${output_dir}/updater"
 
-  info "building flynn-builder"
-  go build -mod=vendor -buildvcs=false \
+  info "building flynn-builder (static)"
+  CGO_ENABLED=0 go build -mod=vendor -buildvcs=false \
     -ldflags "${go_ldflags}" \
     -o "${output_dir}/flynn-builder" ./builder
   chmod +x "${output_dir}/flynn-builder"
+
+  # --- Host-only tool binaries (CGO allowed) ---
 
   info "building flynn-controller-examples"
   go build -mod=vendor -buildvcs=false \

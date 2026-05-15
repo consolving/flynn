@@ -1,186 +1,286 @@
 #!/bin/bash
+#
+# Run Flynn integration tests against an existing Vagrant cluster.
+#
+# Prerequisites:
+#   - A running Flynn cluster (vagrant up + bootstrap complete)
+#   - flynn CLI and flynn-host binary built
+#   - /etc/hosts entries for *.CLUSTER_DOMAIN pointing to ROUTER_IP
+#
+# Usage:
+#   ./script/run-integration-tests-vagrant [options]
+#
+# Options:
+#   -h, --help               Show this message
+#   -f, --filter FILTER      Regex selecting which tests/suites to run
+#   -s, --stream             Stream debug output
+#   -c, --concurrency N      Max concurrent tests [default: 5]
+#   -i, --interactive        Drop into bash on failure
+#   --router-ip IP           Router/discoverd IP [default: 192.168.50.11]
+#   --domain DOMAIN          Cluster domain [default: demo.localflynn.com]
+#   --cli PATH               Path to flynn CLI [default: auto-detect]
+#   --skip-build             Skip building test binary and CLI
 
-set -e
+set -eo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# --- Defaults ----------------------------------------------------------------
+
+ROUTER_IP="${ROUTER_IP:-192.168.50.11}"
+CLUSTER_DOMAIN="${CLUSTER_DOMAIN:-demo.localflynn.com}"
+FILTER=""
+STREAM=false
+INTERACTIVE=false
+CONCURRENCY=5
+CLI_PATH=""
+SKIP_BUILD=false
+
+# --- Parse args --------------------------------------------------------------
 
 usage() {
   cat <<USAGE >&2
 usage: $0 [options]
 
-Run integration tests against an existing Vagrant-based Flynn cluster.
-
-Prerequisites:
-  - A running Flynn cluster (see ../vagrant/ in flynn-dev)
-  - ~/.flynnrc configured with the cluster (flynn cluster add)
-  - flynn CLI installed (e.g. /usr/local/bin/flynn)
+Run integration tests against an existing Vagrant cluster.
 
 OPTIONS:
   -h, --help               Show this message
-  -f, --filter=FILTER      Regular expression selecting which tests and/or suites to run
+  -f, --filter FILTER      Regex selecting which tests/suites to run
   -s, --stream             Stream debug output
-  -d, --debug              Enable debug output
-  -c, --concurrency=N      Max concurrent tests [default: 1]
-  -b, --build              Build test binary and CLI before running [default: true]
-  -r, --router-ip=IP       Router IP address [default: from flynnrc or 192.168.50.11]
-      --cli=PATH           Path to flynn CLI [default: /usr/local/bin/flynn]
-      --no-build            Skip building test binary
+  -c, --concurrency N      Max concurrent tests [default: 5]
+  -i, --interactive        Drop into bash on failure
+  --router-ip IP           Router/discoverd IP [default: 192.168.50.11]
+  --domain DOMAIN          Cluster domain [default: demo.localflynn.com]
+  --cli PATH               Path to flynn CLI
+  --skip-build             Skip building test binary and CLI
+
+ENVIRONMENT:
+  ROUTER_IP                Same as --router-ip
+  CLUSTER_DOMAIN           Same as --domain
+
+EXAMPLES:
+  # Run all CLI tests
+  $0 --filter CLISuite
+
+  # Run a specific test with streaming output
+  $0 --filter TestCreateAppNoGit --stream
+
+  # Run against a custom cluster
+  $0 --router-ip 10.0.0.11 --domain test.localflynn.com
 USAGE
 }
 
-main() {
-  local filter=""
-  local stream=""
-  local debug=""
-  local concurrency="1"
-  local build=true
-  local router_ip=""
-  local cli="/usr/local/bin/flynn"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -f|--filter)
+      FILTER="$2"
+      shift 2
+      ;;
+    -s|--stream)
+      STREAM=true
+      shift
+      ;;
+    -c|--concurrency)
+      CONCURRENCY="$2"
+      shift 2
+      ;;
+    -i|--interactive)
+      INTERACTIVE=true
+      shift
+      ;;
+    --router-ip)
+      ROUTER_IP="$2"
+      shift 2
+      ;;
+    --domain)
+      CLUSTER_DOMAIN="$2"
+      shift 2
+      ;;
+    --cli)
+      CLI_PATH="$2"
+      shift 2
+      ;;
+    --skip-build)
+      SKIP_BUILD=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
 
-  while true; do
-    case "$1" in
-      -h | --help)
-        usage
-        exit 0
-        ;;
-      -f | --filter)
-        if [[ -z "$2" ]]; then
-          echo "ERROR: --filter requires an argument" >&2
-          exit 1
-        fi
-        filter="$2"
-        shift 2
-        ;;
-      -s | --stream)
-        stream="--stream"
-        shift
-        ;;
-      -d | --debug)
-        debug="--debug"
-        shift
-        ;;
-      -c | --concurrency)
-        if [[ -z "$2" ]]; then
-          echo "ERROR: --concurrency requires an argument" >&2
-          exit 1
-        fi
-        concurrency="$2"
-        shift 2
-        ;;
-      -b | --build)
-        build=true
-        shift
-        ;;
-      --no-build)
-        build=false
-        shift
-        ;;
-      -r | --router-ip)
-        if [[ -z "$2" ]]; then
-          echo "ERROR: --router-ip requires an argument" >&2
-          exit 1
-        fi
-        router_ip="$2"
-        shift 2
-        ;;
-      --cli)
-        if [[ -z "$2" ]]; then
-          echo "ERROR: --cli requires an argument" >&2
-          exit 1
-        fi
-        cli="$2"
-        shift 2
-        ;;
-      *)
-        break
-        ;;
-    esac
-  done
+# --- Build -------------------------------------------------------------------
 
-  if [[ $# -ne 0 ]]; then
-    usage
-    exit 1
+if ! $SKIP_BUILD; then
+  echo "==> Building flynn CLI..."
+  (cd "${ROOT}" && go build -o "${ROOT}/build/bin/flynn" ./cli)
+
+  echo "==> Building flynn-test binary..."
+  (cd "${ROOT}" && go build -o "${ROOT}/build/bin/flynn-test" ./test)
+fi
+
+FLYNN_TEST="${ROOT}/build/bin/flynn-test"
+if [[ ! -x "${FLYNN_TEST}" ]]; then
+  echo "ERROR: flynn-test binary not found at ${FLYNN_TEST}" >&2
+  echo "       Run without --skip-build, or build manually: go build -o build/bin/flynn-test ./test" >&2
+  exit 1
+fi
+
+if [[ -z "${CLI_PATH}" ]]; then
+  CLI_PATH="${ROOT}/build/bin/flynn"
+fi
+if [[ ! -x "${CLI_PATH}" ]]; then
+  echo "ERROR: flynn CLI not found at ${CLI_PATH}" >&2
+  exit 1
+fi
+
+# --- Cluster credentials -----------------------------------------------------
+
+# Get the cluster-add command from a running cluster node via flynn-host API.
+# The flynn-host on the Vagrant node can provide TLS pin, domain, and auth key.
+echo "==> Checking cluster is reachable at ${ROUTER_IP}..."
+if ! curl -sf "http://${ROUTER_IP}:1113/host/status" >/dev/null 2>&1; then
+  echo "ERROR: flynn-host API not reachable at ${ROUTER_IP}:1113" >&2
+  echo "       Is the Vagrant cluster running? Try: cd vagrant && vagrant up node1" >&2
+  exit 1
+fi
+
+# Set up a temporary FLYNNRC
+FLYNNRC="$(mktemp /tmp/flynnrc.XXXXXX)"
+export FLYNNRC
+trap 'rm -f "${FLYNNRC}"' EXIT
+
+# Extract cluster credentials from the controller job's environment.
+# We query the flynn-host API directly since we may not have a configured CLI yet.
+echo "==> Extracting cluster credentials..."
+
+# Get the list of hosts
+HOSTS_JSON=$(curl -sf "http://${ROUTER_IP}:1113/host/jobs")
+if [[ -z "${HOSTS_JSON}" ]]; then
+  echo "ERROR: Could not list jobs from flynn-host API" >&2
+  exit 1
+fi
+
+# Extract controller auth key and router TLS pin from job metadata.
+# The API returns a dict keyed by job ID; each value has job.metadata and job.config.env.
+CONTROLLER_KEY=$(echo "${HOSTS_JSON}" | /usr/bin/python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for jid, entry in data.items():
+    job = entry.get('job', entry)
+    meta = job.get('metadata', {})
+    if meta.get('flynn-controller.app_name') == 'controller' and meta.get('flynn-controller.type') == 'web':
+        env = job.get('config', {}).get('env', {})
+        key = env.get('AUTH_KEY', '')
+        if key:
+            print(key)
+            sys.exit(0)
+print('')
+" 2>/dev/null)
+
+TLS_PIN=$(echo "${HOSTS_JSON}" | /usr/bin/python3 -c "
+import json, sys, hashlib, base64
+data = json.load(sys.stdin)
+for jid, entry in data.items():
+    job = entry.get('job', entry)
+    meta = job.get('metadata', {})
+    if meta.get('flynn-controller.app_name') == 'router' and meta.get('flynn-controller.type') == 'app':
+        env = job.get('config', {}).get('env', {})
+        cert_pem = env.get('TLSCERT', '')
+        if cert_pem:
+            # Extract DER from PEM
+            lines = cert_pem.strip().split('\n')
+            b64 = ''.join(l for l in lines if not l.startswith('-----'))
+            der = base64.b64decode(b64)
+            sha = hashlib.sha256(der).digest()
+            print(base64.b64encode(sha).decode())
+            sys.exit(0)
+print('')
+" 2>/dev/null)
+
+if [[ -z "${CONTROLLER_KEY}" ]]; then
+  echo "ERROR: Could not extract controller AUTH_KEY from cluster" >&2
+  exit 1
+fi
+if [[ -z "${TLS_PIN}" ]]; then
+  echo "ERROR: Could not extract router TLS pin from cluster" >&2
+  exit 1
+fi
+
+echo "==> Configuring CLI for cluster ${CLUSTER_DOMAIN}..."
+
+# Add /etc/hosts entries for the cluster domain (idempotent)
+for prefix in controller git images dashboard status blobstore; do
+  HOSTNAME="${prefix}.${CLUSTER_DOMAIN}"
+  if ! grep -q "${HOSTNAME}" /etc/hosts 2>/dev/null; then
+    echo "${ROUTER_IP} ${HOSTNAME}" >> /etc/hosts
   fi
+done
 
-  # Determine router IP from flynnrc if not specified
-  if [[ -z "${router_ip}" ]]; then
-    if [[ -f "${HOME}/.flynnrc" ]]; then
-      # Extract domain from ControllerURL, e.g. controller.192.168.50.11.nip.io → 192.168.50.11
-      router_ip=$(grep -m1 'ControllerURL' "${HOME}/.flynnrc" | sed -E 's|.*controller\.([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\..*|\1|')
-    fi
-    if [[ -z "${router_ip}" ]]; then
-      router_ip="192.168.50.11"
-    fi
-  fi
+# Configure the CLI
+"${CLI_PATH}" cluster add \
+  -p "${TLS_PIN}" \
+  --no-git \
+  default \
+  "${CLUSTER_DOMAIN}" \
+  "${CONTROLLER_KEY}"
 
-  # Verify prerequisites
-  if [[ ! -f "${HOME}/.flynnrc" ]]; then
-    echo "ERROR: ~/.flynnrc not found. Run 'flynn cluster add' first." >&2
-    exit 1
-  fi
+echo "==> CLI configured. Testing connection..."
+if ! "${CLI_PATH}" cluster; then
+  echo "ERROR: flynn cluster command failed" >&2
+  exit 1
+fi
 
-  if ! command -v "${cli}" &>/dev/null; then
-    echo "ERROR: flynn CLI not found at ${cli}" >&2
-    exit 1
-  fi
+# --- Ensure test-apps artifact -----------------------------------------------
 
-  # Verify cluster is reachable
-  echo "==> Checking cluster connectivity (router IP: ${router_ip})..."
-  if ! "${cli}" cluster 2>/dev/null | grep -q "${router_ip}"; then
-    echo "WARNING: flynnrc may not be configured for router IP ${router_ip}" >&2
-  fi
+TEST_APPS_JSON="${ROOT}/build/image/test-apps.json"
+if [[ ! -f "${TEST_APPS_JSON}" ]]; then
+  echo "WARNING: ${TEST_APPS_JSON} not found." >&2
+  echo "         Tests that create apps (TestApp, TestScale, etc.) will fail." >&2
+  echo "         Build test-apps artifact to enable these tests." >&2
+fi
 
-  local test_binary="${ROOT}/build/bin/flynn-test"
+# --- Run tests ---------------------------------------------------------------
 
-  # Build test binary and CLI if requested
-  if ${build}; then
-    echo "==> Building test binary..."
-    mkdir -p "${ROOT}/build/bin"
-    go build -o "${test_binary}" "${ROOT}/test"
+TEST_ARGS=(
+  "--cli" "${CLI_PATH}"
+  "--router-ip" "${ROUTER_IP}"
+  "--concurrency" "${CONCURRENCY}"
+  "--debug"
+  "--build=false"
+  "--kill=false"
+)
 
-    # Build CLI if not already at the expected path
-    if [[ "${cli}" == "${ROOT}/build/bin/flynn" ]] || [[ ! -x "${cli}" ]]; then
-      echo "==> Building flynn CLI..."
-      go build -o "${ROOT}/build/bin/flynn" "${ROOT}/cli"
-      cli="${ROOT}/build/bin/flynn"
-    fi
-  fi
+if [[ -n "${FILTER}" ]]; then
+  TEST_ARGS+=("--run" "${FILTER}")
+fi
+if $STREAM; then
+  TEST_ARGS+=("--stream")
+fi
+if $INTERACTIVE; then
+  TEST_ARGS+=("--interactive")
+fi
 
-  if [[ ! -x "${test_binary}" ]]; then
-    echo "ERROR: Test binary not found at ${test_binary}. Run with --build or build manually." >&2
-    exit 1
-  fi
+echo ""
+echo "==> Running integration tests..."
+echo "    Router IP:    ${ROUTER_IP}"
+echo "    Domain:       ${CLUSTER_DOMAIN}"
+echo "    CLI:          ${CLI_PATH}"
+echo "    Test binary:  ${FLYNN_TEST}"
+if [[ -n "${FILTER}" ]]; then
+  echo "    Filter:       ${FILTER}"
+fi
+echo ""
 
-  # Ensure test-apps.json exists
-  if [[ ! -f "${ROOT}/build/image/test-apps.json" ]]; then
-    echo "WARNING: build/image/test-apps.json not found. Tests requiring test apps will fail." >&2
-  fi
-
-  # Build test args
-  local test_args=(
-    "--router-ip" "${router_ip}"
-    "--cli" "${cli}"
-    "--concurrency" "${concurrency}"
-  )
-
-  if [[ -n "${filter}" ]]; then
-    test_args+=("--run" "${filter}")
-  fi
-  if [[ -n "${stream}" ]]; then
-    test_args+=("${stream}")
-  fi
-  if [[ -n "${debug}" ]]; then
-    test_args+=("${debug}")
-  fi
-
-  echo "==> Running integration tests..."
-  echo "    Router IP:   ${router_ip}"
-  echo "    CLI:         ${cli}"
-  echo "    Filter:      ${filter:-<all>}"
-  echo "    Concurrency: ${concurrency}"
-  echo ""
-
-  exec "${test_binary}" "${test_args[@]}"
-}
-
-main "$@"
+# Run from test/ directory so relative paths to build/image/ work
+# (the test binary expects ../build/image/test-apps.json)
+cd "${ROOT}/test"
+exec "${FLYNN_TEST}" "${TEST_ARGS[@]}"
