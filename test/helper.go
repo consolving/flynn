@@ -607,16 +607,16 @@ func (h *Helper) testBuildCaching(t *c.C, x *Cluster) {
 	t.Assert(r.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
 	r.git("commit", "-m", "bump", "--allow-empty")
-	push := r.git("push", "flynn", "master")
+	push := r.git("push", "flynn", "main")
 	t.Assert(push, Succeeds)
 	t.Assert(push, c.Not(OutputContains), "cached")
 
 	r.git("commit", "-m", "bump", "--allow-empty")
-	push = r.git("push", "flynn", "master")
+	push = r.git("push", "flynn", "main")
 	t.Assert(push, SuccessfulOutputContains, "cached: 0")
 
 	r.git("commit", "-m", "bump", "--allow-empty")
-	push = r.git("push", "flynn", "master")
+	push = r.git("push", "flynn", "main")
 	t.Assert(push, SuccessfulOutputContains, "cached: 1")
 }
 
@@ -641,6 +641,7 @@ func (h *Helper) newGitRepoWithTrace(t *c.C, nameOrURL string, trace bool) *gitR
 
 	if strings.HasPrefix(nameOrURL, "https://") {
 		t.Assert(run(t, exec.Command("git", "clone", nameOrURL, dir)), Succeeds)
+		r.git("branch", "-m", "main")
 		return r
 	} else if nameOrURL != "" {
 		t.Assert(run(t, exec.Command("cp", "-r", filepath.Join("apps", nameOrURL), dir)), Succeeds)

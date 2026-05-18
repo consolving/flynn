@@ -86,7 +86,7 @@ func (s *BlobstoreSuite) testBlobstoreBackend(t *c.C, name, redirectPattern stri
 	r := s.newGitRepo(t, "http")
 	r.cluster = x
 	t.Assert(r.flynn("create", "blobstore-backend-test-"+name), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// set default backend to external backend without printing secrets
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("%s -a blobstore env set %s DEFAULT_BACKEND=%s", args.CLI, strings.Join(env, " "), name))
@@ -129,7 +129,7 @@ func (s *BlobstoreSuite) testBlobstoreBackend(t *c.C, name, redirectPattern stri
 
 	// test that deploying still works
 	t.Assert(r.git("commit", "--allow-empty", "-m", "foo"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// test that build caching still works
 	s.testBuildCaching(t, x)

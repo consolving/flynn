@@ -38,6 +38,9 @@ var _ = c.ConcurrentSuite(&ControllerSuite{})
 func (s *ControllerSuite) SetUpSuite(t *c.C) {
 	var schemaPaths []string
 	walkFn := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if !info.IsDir() && filepath.Ext(path) == ".json" {
 			schemaPaths = append(schemaPaths, path)
 		}
@@ -335,7 +338,7 @@ func (s *ControllerSuite) TestAppDeleteCleanup(t *c.C) {
 	// create and push app
 	r := s.newGitRepo(t, "http")
 	t.Assert(r.flynn("create", app), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// wait for it to start
 	service := app + "-web"
@@ -381,7 +384,7 @@ func (s *ControllerSuite) TestAppDeleteCleanup(t *c.C) {
 
 	// create another release
 	t.Assert(r.git("commit", "--allow-empty", "--message", "deploy"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	releases, err := client.AppReleaseList(app)
 	t.Assert(err, c.IsNil)
 
@@ -409,7 +412,7 @@ func (s *ControllerSuite) TestAppDeleteCleanup(t *c.C) {
 	t.Assert(os.RemoveAll(r.dir), c.IsNil)
 	r = s.newGitRepo(t, "http")
 	t.Assert(r.flynn("create", app), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 }
 
 // https://github.com/flynn/flynn/issues/2257
@@ -437,7 +440,7 @@ func (s *ControllerSuite) TestRouteEvents(t *c.C) {
 	// create and push app
 	r := s.newGitRepo(t, "http")
 	t.Assert(r.flynn("create", app), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 
 	// wait for it to start
 	service := app + "-web"

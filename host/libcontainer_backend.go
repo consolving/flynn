@@ -116,24 +116,27 @@ func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
 	if config.TufDBPath != "" && config.TufRepository != "" {
 		tufClient, err := newTufClient(config.TufDBPath, config.TufRepository)
 		if err != nil {
-			return nil, fmt.Errorf("error initializing TUF client: %s", err)
-		}
-		// Update the local TUF metadata from the remote repository
-		// so that target lookups in Download() can find the targets.
-		// Initialize root keys if this is a fresh local store.
-		if _, err := tufClient.Update(); err != nil {
-			if err == tuf.ErrNoRootKeys {
-				if err := tufClient.Init(tufconfig.RootKeys, 1); err != nil {
-					return nil, fmt.Errorf("error initializing TUF root keys: %s", err)
+			config.Logger.Error("error initializing TUF client (non-fatal, continuing without TUF)", "err", err)
+		} else {
+			// Update the local TUF metadata from the remote repository
+			// so that target lookups in Download() can find the targets.
+			// Initialize root keys if this is a fresh local store.
+			if _, err := tufClient.Update(); err != nil {
+				if err == tuf.ErrNoRootKeys {
+					if err := tufClient.Init(tufconfig.RootKeys, 1); err != nil {
+						config.Logger.Error("error initializing TUF root keys (non-fatal)", "err", err)
+						tufClient = nil
+					} else if _, err := tufClient.Update(); err != nil && !tuf.IsLatestSnapshot(err) {
+						config.Logger.Error("error updating TUF metadata after init (non-fatal)", "err", err)
+						tufClient = nil
+					}
+				} else if !tuf.IsLatestSnapshot(err) {
+					config.Logger.Error("error updating TUF metadata (non-fatal)", "err", err)
+					tufClient = nil
 				}
-				if _, err := tufClient.Update(); err != nil && !tuf.IsLatestSnapshot(err) {
-					return nil, fmt.Errorf("error updating TUF metadata after init: %s", err)
-				}
-			} else if !tuf.IsLatestSnapshot(err) {
-				return nil, fmt.Errorf("error updating TUF metadata: %s", err)
 			}
+			l.tufClient = tufClient
 		}
-		l.tufClient = tufClient
 	}
 	l.httpClient = &http.Client{Transport: &http.Transport{
 		Dial: dialer.RetryDial(l.discoverdDial),

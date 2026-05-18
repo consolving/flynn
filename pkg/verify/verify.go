@@ -45,7 +45,7 @@ type Verifier struct {
 }
 
 func NewVerifier(hashes map[string]string, size int64) (*Verifier, error) {
-	if size <= 0 {
+	if size < 0 {
 		return nil, &ErrInvalidSize{size}
 	}
 	v := &Verifier{
@@ -77,12 +77,16 @@ func (v *Verifier) Reader(r io.Reader) io.Reader {
 	for i, h := range v.hashes {
 		writers[i] = h.hash
 	}
-	v.reader = &io.LimitedReader{R: r, N: v.size}
-	return io.TeeReader(v.reader, io.MultiWriter(writers...))
+	if v.size > 0 {
+		v.reader = &io.LimitedReader{R: r, N: v.size}
+		return io.TeeReader(v.reader, io.MultiWriter(writers...))
+	}
+	// size unknown: read all data without limit
+	return io.TeeReader(r, io.MultiWriter(writers...))
 }
 
 func (v *Verifier) Verify() error {
-	if v.reader == nil || v.reader.N != 0 {
+	if v.size > 0 && (v.reader == nil || v.reader.N != 0) {
 		return ErrShortData
 	}
 	for _, h := range v.hashes {

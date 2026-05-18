@@ -306,14 +306,8 @@ func (w writeFlusher) Write(p []byte) (int, error) {
 var prereceiveHook = []byte(`#!/bin/bash
 set -eo pipefail;
 
-unset GIT_QUARANTINE_PATH
-
 git-archive-all() {
-	GIT_DIR="$(pwd)"
-	cd ..
-	git checkout --force --quiet $1
-	git submodule --quiet update --force --init --checkout --recursive
-	tar --create --exclude-vcs .
+	git archive --format=tar $1
 }
 
 while read oldrev newrev refname; do

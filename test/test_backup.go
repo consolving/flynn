@@ -53,7 +53,7 @@ func (s *BackupSuite) testStackRedeploy(t *c.C, x *Cluster) {
 	r.cluster = x
 	t.Assert(r.git("commit", "-m", "second", "--allow-empty"), Succeeds)
 	t.Assert(r.flynn("-a", "nodejs", "remote", "add"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	release, err := x.controller.GetAppRelease("nodejs")
 	t.Assert(err, c.IsNil)
 	t.Assert(release.Meta["slugrunner.stack"], c.Equals, "heroku-24")
@@ -61,7 +61,7 @@ func (s *BackupSuite) testStackRedeploy(t *c.C, x *Cluster) {
 	// deploy app again with stack set to cedar-14
 	t.Assert(r.git("commit", "-m", "third", "--allow-empty"), Succeeds)
 	t.Assert(r.flynn("env", "set", "FLYNN_STACK=cedar-14"), Succeeds)
-	t.Assert(r.git("push", "flynn", "master"), Succeeds)
+	t.Assert(r.git("push", "flynn", "main"), Succeeds)
 	release, err = x.controller.GetAppRelease("nodejs")
 	t.Assert(err, c.IsNil)
 	t.Assert(release.Meta["slugrunner.stack"], c.Equals, "cedar-14")
