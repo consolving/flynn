@@ -192,12 +192,30 @@ run_unprivileged ${selected_buildpack}/bin/release \
 
 echo_title "Discovering process types"
 if [[ -f "${build_dir}/Procfile" ]]; then
-  types=$(ruby -r yaml -e "puts YAML.load_file('${build_dir}/Procfile').keys.join(', ')")
+  types=$(grep -E '^[a-zA-Z_][a-zA-Z0-9_-]*:' "${build_dir}/Procfile" | cut -d: -f1 | paste -sd ', ')
   echo_normal "Procfile declares types -> ${types}"
 fi
 default_types=""
 if [[ -s "${build_dir}/.release" ]]; then
-  default_types=$(ruby -r yaml -e "puts (YAML.load_file('${build_dir}/.release') || {}).fetch('default_process_types', {}).keys.join(', ')")
+  in_dpt=false
+  while IFS= read -r line; do
+    if echo "$line" | grep -qE '^default_process_types:'; then
+      in_dpt=true
+      continue
+    fi
+    if [[ "$in_dpt" == true ]]; then
+      if echo "$line" | grep -qE '^  [a-zA-Z_][a-zA-Z0-9_-]*:'; then
+        key=$(echo "$line" | sed 's/^  \([a-zA-Z_][a-zA-Z0-9_-]*\):.*/\1/')
+        if [[ -n "$default_types" ]]; then
+          default_types="${default_types}, ${key}"
+        else
+          default_types="${key}"
+        fi
+      else
+        break
+      fi
+    fi
+  done < "${build_dir}/.release"
   if [[ -n "${default_types}" ]]; then
     echo_normal "Default process types for ${buildpack_name} -> ${default_types}"
   fi
