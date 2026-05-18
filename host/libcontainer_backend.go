@@ -313,6 +313,9 @@ func (l *LibcontainerBackend) ConfigureNetworking(config *host.NetworkConfig) er
 			}
 		}
 	}
+	// Filter out any resolvers in the flannel overlay subnet (100.100.0.0/16)
+	// to prevent discoverd from recursing to itself after a restart.
+	config.Resolvers = filterOverlayResolvers(config.Resolvers)
 
 	// Write a resolv.conf to be bind-mounted into containers pointing at the
 	// future discoverd DNS listener
@@ -1959,6 +1962,25 @@ func isLoopbackResolvers(servers []string) bool {
 		}
 	}
 	return true
+}
+
+// filterOverlayResolvers removes any DNS servers that are in the flannel
+// overlay subnet (100.100.0.0/16). After a restart, /etc/resolv.conf may
+// contain discoverd's own address from a previous run, which would cause
+// discoverd to recurse to itself.
+func filterOverlayResolvers(servers []string) []string {
+	var filtered []string
+	for _, s := range servers {
+		ip := net.ParseIP(s)
+		if ip != nil && ip.To4() != nil && ip.To4()[0] == 100 && ip.To4()[1] == 100 {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	if len(filtered) == 0 {
+		return servers // don't return empty list
+	}
+	return filtered
 }
 
 func forceMemoryOvercommit() error {
