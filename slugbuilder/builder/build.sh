@@ -240,7 +240,7 @@ if [[ -n "${BUILD_CACHE_URL}" ]]; then
   tar \
     --create \
     --directory "${cache_root}" \
-    --use-compress-program=pigz \
+    --use-compress-program="$(command -v pigz 2>/dev/null || echo gzip)" \
     . \
   | curl \
     --output "$(mktemp)" \

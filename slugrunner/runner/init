@@ -8,13 +8,23 @@ set -eo pipefail
 shopt -s nullglob
 mkdir -p .profile.d
 if [[ -s .release ]]; then
-  ruby -r yaml > .profile.d/config_vars <<-RUBY
-release = YAML.load_file('.release') || {}
-config = release['config_vars'] || {}
-config.each_pair do |k, v|
-  puts "#{k}=\${#{k}:-'#{v}'}"
-end
-RUBY
+  # Parse config_vars from .release YAML (simple key: value format)
+  in_config=false
+  while IFS= read -r line; do
+    if echo "$line" | grep -qE '^config_vars:'; then
+      in_config=true
+      continue
+    fi
+    if [[ "$in_config" == true ]]; then
+      if echo "$line" | grep -qE '^  [a-zA-Z_][a-zA-Z0-9_]*:'; then
+        key=$(echo "$line" | sed 's/^  \([a-zA-Z_][a-zA-Z0-9_]*\):.*/\1/')
+        val=$(echo "$line" | sed "s/^  [a-zA-Z_][a-zA-Z0-9_]*: *//; s/^['\"]//; s/['\"]$//")
+        echo "${key}=\${${key}:-'${val}'}"
+      else
+        break
+      fi
+    fi
+  done < .release > .profile.d/config_vars
 fi
 for file in .profile.d/*; do
   source "${file}"
@@ -29,9 +39,24 @@ hash -r
 case "$1" in
   start)
     if [[ -f Procfile ]]; then
-      command=$(ruby -r yaml -e "puts YAML.load_file('Procfile')['$2']")
+      command=$(grep -E "^$2:" Procfile | sed "s/^$2: *//" | head -1)
     else
-      command=$(ruby -r yaml -e "puts (YAML.load_file('.release') || {}).fetch('default_process_types', {})['$2']")
+      # Parse default_process_types from .release
+      in_dpt=false
+      while IFS= read -r line; do
+        if echo "$line" | grep -qE '^default_process_types:'; then
+          in_dpt=true
+          continue
+        fi
+        if [[ "$in_dpt" == true ]]; then
+          if echo "$line" | grep -qE "^  $2:"; then
+            command=$(echo "$line" | sed "s/^  $2: *//")
+            break
+          elif ! echo "$line" | grep -qE '^  '; then
+            break
+          fi
+        fi
+      done < .release
     fi
     ;;
   *)
