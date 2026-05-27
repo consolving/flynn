@@ -16,9 +16,8 @@ var (
 	// TUF signature verification failures are NOT retried (they indicate
 	// tampering, not a transient issue).
 	Mirrors = []string{
-		"https://consolving.github.io/flynn-tuf-repo/repository", // GitHub Pages (current primary)
-		// Future: add IPFS-backed gateway as primary, e.g.:
-		// "https://tuf.consolving.net/repository",
+		"https://tuf.consolving.net/repository",                  // IPFS-backed (DNS round-robin host1+host2)
+		"https://consolving.github.io/flynn-tuf-repo/repository", // GitHub Pages (fallback)
 	}
 )
 
