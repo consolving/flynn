@@ -1214,8 +1214,12 @@ func (e *exporter) stageTUFTargets() error {
 				}
 				layersStaged[layer.ID] = true
 
-				// Stage squashfs layer
-				layerTarget := util.NormalizeTarget(path.Join("layers", layer.ID+".squashfs"))
+				// Stage squashfs layer FLAT under repository/targets/ so it is
+				// reachable via the dl.consolving.net addprefix
+				// (/ipfs/{CID}/repository/targets). Previously these were staged
+				// under a layers/ subdirectory, but LayerURL is the flat
+				// https://dl.consolving.net/{id}.squashfs, so nested layers 404ed.
+				layerTarget := util.NormalizeTarget(layer.ID + ".squashfs")
 				layerSrc := filepath.Join(e.layerCache, layer.ID+".squashfs")
 				layerDst := filepath.Join(stagedTargetsDir, layerTarget)
 				if err := os.MkdirAll(filepath.Dir(layerDst), 0755); err != nil {
@@ -1228,8 +1232,8 @@ func (e *exporter) stageTUFTargets() error {
 					return fmt.Errorf("adding layer target %s: %s", layer.ID[:16], err)
 				}
 
-				// Stage layer config JSON
-				layerConfigTarget := util.NormalizeTarget(path.Join("layers", layer.ID+".json"))
+				// Stage layer config JSON flat alongside the layer
+				layerConfigTarget := util.NormalizeTarget(layer.ID + ".json")
 				layerConfigData, err := json.Marshal(layer)
 				if err != nil {
 					return err
@@ -1242,7 +1246,7 @@ func (e *exporter) stageTUFTargets() error {
 					return fmt.Errorf("adding layer config target %s: %s", layer.ID[:16], err)
 				}
 
-				fmt.Printf("    + layers/%s.squashfs (%s)\n", layer.ID[:16], humanSize(layer.Length))
+				fmt.Printf("    + %s.squashfs (%s)\n", layer.ID[:16], humanSize(layer.Length))
 			}
 		}
 	}
