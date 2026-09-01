@@ -24,11 +24,15 @@ buildable, testable, and deployable state.
 - Go version upgraded from 1.13 to 1.22
 - CI pipeline via GitHub Actions (build + unit tests)
 - End-to-end verified: `flynn-host download` pulls images from the new TUF repo
+- IPFS-backed artifact mirror at `dl.consolving.net` and `tuf.consolving.net`
+- GitHub Actions webhook auto-re-syncs the IPFS mirror after monthly TUF refreshes
+- Layer-sync gap closed: persistent canonical layer store on the mirror plus flat staging in `export-tuf`
+- Source code review completed; findings recorded in the infrastructure implementation plan
 
 **What is in progress:**
 
 - Integration testing and cluster bootstrap (discoverd, flannel, controller)
-- runc fork modernization (security patches, cgroups v2)
+- runc fork modernization (security patches, cgroups v2) — analysis documented, awaiting Phase 6 cluster verification
 
 
 ## Repository Layout

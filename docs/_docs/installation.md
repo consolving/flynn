@@ -17,18 +17,39 @@ For development or testing, a single-node cluster is the fastest way to get star
 
 ### Install Flynn
 
+Install runtime dependencies first:
+
 ```bash
-# Install dependencies
 sudo apt-get update
 sudo apt-get install -y zfsutils-linux iptables curl squashfs-tools
+```
 
-# Download and install flynn-host
-sudo mkdir -p /usr/local/bin
-curl -fsSL https://github.com/consolving/flynn/releases/download/v20260416.0/flynn-host.gz | \
+The `flynn-host` and `flynn-init` binaries are currently distributed as hashed
+TUF targets rather than as plain GitHub Release assets. The easiest way to
+obtain them is to build from source; the CLI is available from GitHub Releases.
+
+```bash
+# Install build dependencies
+sudo apt-get install -y golang-go libc6-dev libseccomp-dev
+
+# Build flynn-host and flynn-init from the source tree
+go build -o /tmp/flynn-host ./host
+go build -o /tmp/flynn-init ./host/flynn-init
+
+sudo mv /tmp/flynn-host /tmp/flynn-init /usr/local/bin/
+```
+
+Alternatively, download the current hashed targets directly from the TUF
+repository (the hash changes with every release; check `targets.json` for the
+current value):
+
+```bash
+# Top-level flynn-host.gz target (hashed filename)
+curl -fsSL https://consolving.github.io/flynn-tuf-repo/repository/12dc0306be187d22869f23254a4904e9581bc371787d0cffcc8e189724ae931317ae740528cb4e9a1d126b709844ee9c5399acd131fe70d734f90b1d512d0e48.flynn-host.gz | \
   gunzip > /tmp/flynn-host && chmod +x /tmp/flynn-host && sudo mv /tmp/flynn-host /usr/local/bin/
 
-# Download flynn-init
-curl -fsSL https://github.com/consolving/flynn/releases/download/v20260416.0/flynn-init.gz | \
+# Versioned flynn-init.gz target (example: v20260811.0)
+curl -fsSL https://consolving.github.io/flynn-tuf-repo/repository/v20260811.0/447ea87268265337ef12991116b7bc54276374b1a2e4054a05eedfa44bf4ade329f9fb5771b14bf70b3c5058f82d93ce02ad88fc2f74e7e102048f4fc25d6d51.flynn-init.gz | \
   gunzip > /tmp/flynn-init && chmod +x /tmp/flynn-init && sudo mv /tmp/flynn-init /usr/local/bin/
 ```
 
@@ -77,7 +98,7 @@ The bootstrap process outputs credentials. Save the `CONTROLLER_KEY` and `TLS_PI
 ### Install the CLI
 
 ```bash
-curl -fsSL https://github.com/consolving/flynn/releases/download/v20260416.0/flynn-cli-linux-amd64.gz | \
+curl -fsSL https://github.com/consolving/flynn/releases/download/v20260503.0/flynn-cli-linux-amd64.gz | \
   gunzip > /tmp/flynn && chmod +x /tmp/flynn && sudo mv /tmp/flynn /usr/local/bin/flynn
 ```
 
@@ -150,7 +171,8 @@ Requires: Vagrant, vagrant-libvirt plugin, libvirt, KVM.
 
 Flynn uses [The Update Framework (TUF)](https://theupdateframework.io/) for secure artifact distribution. The TUF repository is hosted at:
 
-- **Metadata**: `https://consolving.github.io/flynn-tuf-repo/repository`
-- **Artifacts**: GitHub Releases (`consolving/flynn` tag `v20260416.0`)
+- **Metadata**: `https://consolving.github.io/flynn-tuf-repo/repository` (and the IPFS-backed mirror `https://tuf.consolving.net/repository`)
+- **CLI**: GitHub Releases (`consolving/flynn` tag `v20260503.0`)
+- **Host/init binaries**: Hashed TUF targets under `repository/targets/`
 
 Root keys use ed25519 with a 2-of-4 threshold for root role signing.

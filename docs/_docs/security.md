@@ -17,8 +17,9 @@ Flynn uses TUF for secure distribution of component images:
 
 - **4 root keys** (ed25519) with a 2-of-4 signing threshold
 - **Offline root signing**: Root keys are kept offline; only targets/snapshot/timestamp keys are used in CI
-- **Repository**: `https://consolving.github.io/flynn-tuf-repo/repository`
-- **Artifacts**: GitHub Releases (`consolving/flynn` tag `v20260416.0`)
+- **Metadata**: `https://consolving.github.io/flynn-tuf-repo/repository` (mirror: `https://tuf.consolving.net/repository`)
+- **CLI**: GitHub Releases (`consolving/flynn` tag `v20260503.0`)
+- **Host/init binaries**: Hashed TUF targets under `repository/targets/`
 
 `flynn-host download` verifies all artifacts against TUF metadata before installation.
 
