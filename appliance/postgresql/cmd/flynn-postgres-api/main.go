@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
-	"context"
 	"github.com/flynn/flynn/discoverd/client"
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/postgres"
@@ -104,9 +105,23 @@ func (p *pgAPI) createDatabase(ctx context.Context, w http.ResponseWriter, req *
 	})
 }
 
+// validHexID reports whether s is safe to interpolate into a DROP/CREATE
+// statement. Database and user identifiers are generated server-side as
+// 32-char lowercase hex (random.Hex(16)); anything else is rejected so
+// request-derived values can never inject SQL.
+func validHexID(s string) bool {
+	if len(s) == 0 || len(s) > 32 {
+		return false
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return false
+	}
+	return true
+}
+
 func (p *pgAPI) dropDatabase(ctx context.Context, w http.ResponseWriter, req *http.Request) {
 	id := strings.SplitN(strings.TrimPrefix(req.FormValue("id"), "/databases/"), ":", 2)
-	if len(id) != 2 || id[1] == "" {
+	if len(id) != 2 || !validHexID(id[0]) || !validHexID(id[1]) {
 		httphelper.ValidationError(w, "id", "is invalid")
 		return
 	}

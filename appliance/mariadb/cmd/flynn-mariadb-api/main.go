@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,7 +20,6 @@ import (
 	"github.com/flynn/flynn/pkg/sirenia/scale"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
-	"context"
 	"github.com/inconshreveable/log15"
 )
 
@@ -64,6 +65,20 @@ func main() {
 type API struct {
 	mtx      sync.Mutex
 	scaledUp bool
+}
+
+// validHexID reports whether s is safe to interpolate into a DROP/CREATE
+// statement. Database and user identifiers are generated server-side as
+// 32-char lowercase hex (random.Hex(16)); anything else is rejected so
+// request-derived values can never inject SQL.
+func validHexID(s string) bool {
+	if len(s) == 0 || len(s) > 32 {
+		return false
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return false
+	}
+	return true
 }
 
 func (a *API) createDatabase(ctx context.Context, w http.ResponseWriter, req *http.Request) {
@@ -113,7 +128,7 @@ func (a *API) createDatabase(ctx context.Context, w http.ResponseWriter, req *ht
 
 func (a *API) dropDatabase(ctx context.Context, w http.ResponseWriter, req *http.Request) {
 	id := strings.SplitN(strings.TrimPrefix(req.FormValue("id"), "/databases/"), ":", 2)
-	if len(id) != 2 || id[1] == "" {
+	if len(id) != 2 || !validHexID(id[0]) || !validHexID(id[1]) {
 		httphelper.ValidationError(w, "id", "is invalid")
 		return
 	}
