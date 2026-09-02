@@ -233,13 +233,24 @@ func (e *exporter) buildBaseLayers() error {
 }
 
 // loadBaseLayerFromCache finds the cached layer for the given base name.
-// It uses the known base layer hashes from the layer cache's JSON metadata.
+// It identifies base layers deterministically by consulting the base layer
+// references already committed in the TUF repository's image manifests, rather
+// than relying on size heuristics. Size heuristics are ambiguous when multiple
+// candidate layers share the same size (e.g. an old base layer lingering in the
+// cache alongside the current one), which previously could select the wrong
+// base and silently corrupt every derived image.
 func (e *exporter) loadBaseLayerFromCache(name string) (*ct.ImageLayer, error) {
-	// Scan the cache for layers and check their JSON metadata to identify base layers.
-	// Base layers built by buildBaseLayer are large squashfs files.
-	// For busybox: ~2.5 MB with /bin/busybox, /etc/passwd
-	// For ubuntu-noble: ~158 MB with full Ubuntu rootfs
+	// The set of base layer IDs that the committed image manifests actually
+	// reference as the rootfs layer0 (the base layer) for this platform.
+	committedBases, err := e.committedBaseLayerIDs(name)
+	if err != nil {
+		return nil, fmt.Errorf("reading committed base layers: %s", err)
+	}
 
+	// Scan the cache and select a candidate that both matches the type check
+	// and (if any committed base is available) exactly matches a committed
+	// base layer ID. Ties are resolved deterministically by preferring the
+	// committed base over a stale same-sized layer, and by stable ordering.
 	entries, err := os.ReadDir(e.layerCache)
 	if err != nil {
 		return nil, err
@@ -247,6 +258,7 @@ func (e *exporter) loadBaseLayerFromCache(name string) (*ct.ImageLayer, error) {
 
 	var bestID string
 	var bestSize int64
+	var bestCommitted bool
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".squashfs") {
 			continue
@@ -258,27 +270,30 @@ func (e *exporter) loadBaseLayerFromCache(name string) (*ct.ImageLayer, error) {
 		id := strings.TrimSuffix(entry.Name(), ".squashfs")
 		size := info.Size()
 
+		matchesType := false
 		if name == "ubuntu-noble" {
-			// Ubuntu Noble base is ~150-170 MB, has /etc/cloud/ directory
 			if size > 100*1024*1024 {
-				sqfsPath := filepath.Join(e.layerCache, entry.Name())
-				if isUbuntuNobleBase(sqfsPath) && size > bestSize {
-					bestSize = size
-					bestID = id
-				}
+				matchesType = isUbuntuNobleBase(filepath.Join(e.layerCache, entry.Name()))
 			}
 		} else if name == "busybox" {
-			// Busybox base is ~2-3 MB (not 4KB which would be slugrunner)
 			if size > 1*1024*1024 && size < 10*1024*1024 {
-				// Verify it's actually busybox by checking it has /bin/busybox
-				sqfsPath := filepath.Join(e.layerCache, entry.Name())
-				if isBusyboxLayer(sqfsPath) {
-					if bestSize == 0 || size > bestSize {
-						bestSize = size
-						bestID = id
-					}
-				}
+				matchesType = isBusyboxLayer(filepath.Join(e.layerCache, entry.Name()))
 			}
+		}
+		if !matchesType {
+			continue
+		}
+
+		committed := committedBases[id]
+		// A candidate that matches a committed base always beats a stale
+		// same-size alternative; otherwise prefer the largest candidate.
+		if committed && !bestCommitted {
+			bestCommitted = true
+			bestID = id
+			bestSize = size
+		} else if committed == bestCommitted && size > bestSize {
+			bestID = id
+			bestSize = size
 		}
 	}
 
@@ -307,6 +322,49 @@ func (e *exporter) loadBaseLayerFromCache(name string) (*ct.ImageLayer, error) {
 			"sha512_256": bestID,
 		},
 	}, nil
+}
+
+// committedBaseLayerIDs returns the set of base layer IDs that the image
+// manifests already committed in the TUF repository reference as the layer0
+// (base) of their rootfs. This is the ground truth for which base layer a
+// platform, and is used to select the correct cached base layer deterministically.
+func (e *exporter) committedBaseLayerIDs(name string) (map[string]bool, error) {
+	ids := make(map[string]bool)
+	imagesDir := filepath.Join(e.tufDir, "repository", "targets", "images")
+	matches, err := filepath.Glob(filepath.Join(imagesDir, "*.json"))
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range matches {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		var manifest ct.ImageManifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			continue // skip malformed/unrelated json
+		}
+		for _, rootfs := range manifest.Rootfs {
+			if len(rootfs.Layers) == 0 {
+				continue
+			}
+			baseID := rootfs.Layers[0].ID
+			// Confirm the candidate actually looks like the requested base type
+			// so we don't treat, e.g., a busybox base as the ubuntu base.
+			sqfsPath := filepath.Join(e.layerCache, baseID+".squashfs")
+			same := false
+			switch name {
+			case "ubuntu-noble":
+				same = isUbuntuNobleBase(sqfsPath)
+			case "busybox":
+				same = isBusyboxLayer(sqfsPath)
+			}
+			if same {
+				ids[baseID] = true
+			}
+		}
+	}
+	return ids, nil
 }
 
 // isBusyboxLayer checks if a squashfs file contains /bin/busybox
