@@ -89,6 +89,7 @@ type Scheduler struct {
 	placementRequests     chan *PlacementRequest
 	internalStateRequests chan *InternalStateRequest
 
+	rectifyMu    sync.Mutex
 	rectifyBatch map[utils.FormationKey]struct{}
 
 	// formationlessJobs is a map of formation keys to a list of jobs
@@ -877,10 +878,14 @@ func (s *Scheduler) SyncHosts() (err error) {
 }
 
 func (s *Scheduler) HandleRectify() error {
-	for key := range s.rectifyBatch {
+	s.rectifyMu.Lock()
+	batch := s.rectifyBatch
+	s.rectifyBatch = make(map[utils.FormationKey]struct{})
+	s.rectifyMu.Unlock()
+
+	for key := range batch {
 		s.RectifyFormation(key)
 	}
-	s.rectifyBatch = make(map[utils.FormationKey]struct{})
 	return nil
 }
 
@@ -2398,7 +2403,9 @@ func (s *Scheduler) addSink(sink *ct.Sink) {
 }
 
 func (s *Scheduler) triggerRectify(key utils.FormationKey) {
+	s.rectifyMu.Lock()
 	s.rectifyBatch[key] = struct{}{}
+	s.rectifyMu.Unlock()
 	select {
 	case s.rectify <- struct{}{}:
 	default:
