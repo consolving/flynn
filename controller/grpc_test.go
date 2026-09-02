@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"context"
 	"github.com/flynn/flynn/controller/api"
 	"github.com/flynn/flynn/controller/data"
 	tu "github.com/flynn/flynn/controller/testutils"
@@ -18,7 +19,6 @@ import (
 	. "github.com/flynn/go-check"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/jackc/pgx"
-	"context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -191,9 +191,9 @@ func (s *GRPCSuite) createTestDeploymentEvent(c *C, d *api.ExpandedDeployment, e
 func (s *GRPCSuite) createTestArtifact(c *C, in *ct.Artifact) *ct.Artifact {
 	if in.Type == "" {
 		in.Type = ct.ArtifactTypeFlynn
-		in.RawManifest = ct.ImageManifest{
+		in.RawManifest = (&ct.ImageManifest{
 			Type: ct.ImageManifestTypeV1,
-		}.RawManifest()
+		}).RawManifest()
 	}
 	if in.URI == "" {
 		in.URI = fmt.Sprintf("https://example.com/%s", random.String(8))

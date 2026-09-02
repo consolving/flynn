@@ -679,7 +679,7 @@ func (i *ImageManifest) ID() string {
 	return i.Hashes()["sha512_256"]
 }
 
-func (i ImageManifest) RawManifest() json.RawMessage {
+func (i *ImageManifest) RawManifest() json.RawMessage {
 	data, _ := cjson.Marshal(i)
 	return data
 }
