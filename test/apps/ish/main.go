@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -36,15 +37,30 @@ func main() {
 	}
 	shutdown.BeforeExit(func() { hb.Close() })
 
-	http.HandleFunc("/ish", ish)
+	// token must be set explicitly; the server refuses to run without it so
+	// the endpoint can never be an open, unauthenticated command shell.
+	token := os.Getenv("TOKEN")
+	if token == "" {
+		shutdown.Fatal(errors.New("ish: TOKEN environment variable is required"))
+	}
+
+	http.HandleFunc("/ish", func(w http.ResponseWriter, r *http.Request) {
+		ish(w, r, token)
+	})
 	if err := http.Serve(l, nil); err != nil {
 		shutdown.Fatal(err)
 	}
 }
 
-func ish(resp http.ResponseWriter, req *http.Request) {
+func ish(resp http.ResponseWriter, req *http.Request, token string) {
 	if req.Method != "POST" {
 		http.Error(resp, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// require a shared secret so the command-execution endpoint is not open
+	// to unauthenticated callers.
+	if req.Header.Get("Authorization") != "Bearer "+token {
+		http.Error(resp, "401 Unauthorized", http.StatusUnauthorized)
 		return
 	}
 	body, _ := io.ReadAll(req.Body)

@@ -205,6 +205,7 @@ type IshApp struct {
 	host        *cluster.Host
 	app         *ct.App
 	extraConfig host.ContainerConfig
+	token       string
 }
 
 func (a *IshApp) Cleanup() {
@@ -254,13 +255,15 @@ func (s *Helper) makeIshApp(t *c.C, a *IshApp) (*IshApp, error) {
 	a.app = app
 
 	// run a job that accepts tcp connections and performs tasks we ask of it in its container
+	a.token = "ish-" + random.String(24)
 	a.cmd = exec.JobUsingHost(a.host, s.createArtifactWithClient(t, "test-apps", a.client), &host.Job{
 		Metadata: map[string]string{"flynn-controller.app": app.ID},
 		Config: host.ContainerConfig{
 			Args:  []string{"/bin/ish"},
 			Ports: []host.Port{{Proto: "tcp"}},
 			Env: map[string]string{
-				"NAME": serviceName,
+				"NAME":  serviceName,
+				"TOKEN": a.token,
 			},
 		}.Merge(a.extraConfig),
 	})
@@ -294,11 +297,16 @@ func (s *Helper) makeIshApp(t *c.C, a *IshApp) (*IshApp, error) {
 }
 
 func (a *IshApp) run(cmd string) (string, error) {
-	resp, err := http.Post(
+	req, err := http.NewRequest(
+		"POST",
 		fmt.Sprintf("http://%s/ish", a.addr),
-		"text/plain",
 		strings.NewReader(cmd),
 	)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+a.token)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
