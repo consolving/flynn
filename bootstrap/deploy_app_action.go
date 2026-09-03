@@ -102,7 +102,7 @@ func (a *DeployAppAction) Run(s *State) error {
 		}
 	}
 	if len(formation.Processes) > 0 {
-		timeout := 5 * time.Minute
+		timeout := 15 * time.Minute
 		opts := ct.ScaleOptions{Timeout: &timeout, Processes: formation.Processes}
 		if err := client.ScaleAppRelease(a.App.ID, a.Release.ID, opts); err != nil {
 			return err
