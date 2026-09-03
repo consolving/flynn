@@ -345,7 +345,7 @@ func (s *State) persist(jobID string) {
 
 		return nil
 	}); err != nil {
-		panic(fmt.Errorf("could not persist to boltdb: %s", err))
+		log.Printf("could not persist state to boltdb: %s", err)
 	}
 }
 
