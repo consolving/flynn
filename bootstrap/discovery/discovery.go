@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -69,6 +70,7 @@ func RegisterInstance(info Info) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated && res.StatusCode != http.StatusConflict {
 		return "", urlError("POST", uri, res.StatusCode)
 	}
@@ -97,10 +99,11 @@ func GetCluster(uri string) ([]*Instance, error) {
 }
 
 func NewToken() (string, error) {
-	uri := "https://discovery.flynn.io/clusters"
-	if base := os.Getenv("DISCOVERY_SERVER"); base != "" {
-		uri = base + "/clusters"
+	discoveryServer := os.Getenv("DISCOVERY_SERVER")
+	if discoveryServer == "" {
+		return "", errors.New("discoverd: DISCOVERY_SERVER env var is not set")
 	}
+	uri := discoveryServer + "/clusters"
 
 	req, err := http.NewRequest("POST", uri, nil)
 	if err != nil {
@@ -111,6 +114,7 @@ func NewToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated {
 		return "", urlError("POST", uri, res.StatusCode)
 	}

@@ -257,13 +257,21 @@ func (i *Instance) dialSSH(stderr io.Writer) error {
 	}
 
 	var sc *ssh.Client
+	sshUser := os.Getenv("FLYNN_SSH_USER")
+	if sshUser == "" {
+		sshUser = "ubuntu"
+	}
+	sshPass := os.Getenv("FLYNN_SSH_PASSWORD")
+	if sshPass == "" {
+		sshPass = "ubuntu"
+	}
 	err := sshAttempts.Run(func() (err error) {
 		if stderr != nil {
 			fmt.Fprintf(stderr, "Attempting to ssh to %s:22...\n", i.IP)
 		}
 		sc, err = ssh.Dial("tcp", i.IP+":22", &ssh.ClientConfig{
-			User:            "ubuntu",
-			Auth:            []ssh.AuthMethod{ssh.Password("ubuntu")},
+			User:            sshUser,
+			Auth:            []ssh.AuthMethod{ssh.Password(sshPass)},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		})
 		return

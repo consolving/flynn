@@ -170,12 +170,17 @@ func (inst *Instance) id() string {
 }
 
 func (inst *Instance) Clone() *Instance {
-	res := *inst
-	res.Meta = make(map[string]string, len(inst.Meta))
+	res := &Instance{
+		ID:    inst.ID,
+		Addr:  inst.Addr,
+		Proto: inst.Proto,
+		Index: inst.Index,
+		Meta:  make(map[string]string, len(inst.Meta)),
+	}
 	for k, v := range inst.Meta {
 		res.Meta[k] = v
 	}
-	return &res
+	return res
 }
 
 func md5sum(data string) string {

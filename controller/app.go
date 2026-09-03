@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"context"
 	"github.com/flynn/flynn/controller/schema"
 	ct "github.com/flynn/flynn/controller/types"
 	logagg "github.com/flynn/flynn/logaggregator/types"
@@ -14,7 +15,6 @@ import (
 	"github.com/flynn/flynn/pkg/httphelper"
 	"github.com/flynn/flynn/pkg/sse"
 	que "github.com/flynn/que-go"
-	"context"
 )
 
 type appUpdate map[string]interface{}
@@ -80,6 +80,7 @@ func (c *controllerAPI) ScheduleAppGarbageCollection(ctx context.Context, w http
 
 func (c *controllerAPI) AppLog(ctx context.Context, w http.ResponseWriter, req *http.Request) {
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	opts := logagg.LogOpts{
 		Follow: req.FormValue("follow") == "true",
@@ -119,7 +120,6 @@ func (c *controllerAPI) AppLog(ctx context.Context, w http.ResponseWriter, req *
 			}
 		}()
 	}
-	defer cancel()
 	defer rc.Close()
 
 	if !strings.Contains(req.Header.Get("Accept"), "text/event-stream") {

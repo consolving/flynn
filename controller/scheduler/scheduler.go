@@ -1276,8 +1276,13 @@ func (s *Scheduler) HandleInternalStateRequest(req *InternalStateRequest) {
 	}
 
 	for id, host := range s.hosts {
-		h := *host
-		h.Tags = make(map[string]string, len(host.Tags))
+		h := Host{
+			ID:       host.ID,
+			Healthy:  host.Healthy,
+			Checks:   host.Checks,
+			Shutdown: host.Shutdown,
+			Tags:     make(map[string]string, len(host.Tags)),
+		}
 		for key, val := range host.Tags {
 			h.Tags[key] = val
 		}

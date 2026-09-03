@@ -58,12 +58,20 @@ func (s *BlobstoreSuite) TestBlobstoreBackendAzure(t *c.C) {
 	s.testBlobstoreBackend(t, "azure", ".+blob.core.windows.net.+", nil, `"BACKEND_AZURE=$BLOBSTORE_AZURE_CONFIG"`)
 }
 
-const (
-	minioAccessKey = "AKIAIOSFODNN7EXAMPLE"
-	minioSecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-)
+func getMinioCredentials() (string, string) {
+	accessKey := os.Getenv("MINIO_ACCESS_KEY")
+	if accessKey == "" {
+		accessKey = "AKIAIOSFODNN7EXAMPLE"
+	}
+	secretKey := os.Getenv("MINIO_SECRET_KEY")
+	if secretKey == "" {
+		secretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	}
+	return accessKey, secretKey
+}
 
 func (s *BlobstoreSuite) TestBlobstoreBackendMinio(t *c.C) {
+	minioAccessKey, minioSecretKey := getMinioCredentials()
 	setup := func(x *Cluster) {
 		app, release := s.createAppWithClient(t, x.controller)
 		err := x.controller.ScaleAppRelease(app.ID, release.ID, ct.ScaleOptions{

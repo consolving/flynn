@@ -468,10 +468,13 @@ func (h *Helper) createAppWithClient(t *c.C, client controller.Client) (*ct.App,
 			},
 			"minio": {
 				Args: []string{"/bin/minio", "server", "/data"},
-				Env: map[string]string{
-					"MINIO_ACCESS_KEY": minioAccessKey,
-					"MINIO_SECRET_KEY": minioSecretKey,
-				},
+				Env: func() map[string]string {
+					accessKey, secretKey := getMinioCredentials()
+					return map[string]string{
+						"MINIO_ACCESS_KEY": accessKey,
+						"MINIO_SECRET_KEY": secretKey,
+					}
+				}(),
 				Ports: []ct.Port{{
 					Proto: "tcp",
 					Port:  9000,

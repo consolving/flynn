@@ -402,9 +402,13 @@ func uploadRepo(path, cacheKey string) error {
 	// upload the tarball to the blobstore
 	req, _ := http.NewRequest("PUT", blobstoreCacheURL(cacheKey), r)
 	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	if err := <-errCh; err != nil {
 		return err
 	}
-	resp.Body.Close()
-	return err
+	io.Copy(io.Discard, resp.Body)
+	return nil
 }

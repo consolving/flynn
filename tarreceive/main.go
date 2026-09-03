@@ -139,7 +139,7 @@ func (s *server) handleCreateLayer(w http.ResponseWriter, r *http.Request, p htt
 		}
 
 		// extract the tar
-		if _, err := tarFile.Seek(0, os.SEEK_SET); err != nil {
+		if _, err := tarFile.Seek(0, io.SeekStart); err != nil {
 			return nil, err
 		}
 		extractDir := filepath.Join(tmpDir, "extract")
@@ -170,7 +170,7 @@ func (s *server) handleCreateLayer(w http.ResponseWriter, r *http.Request, p htt
 		layerSha := hex.EncodeToString(layerHash.Sum(nil))
 
 		// upload squashfs layer
-		if _, err := layerFile.Seek(0, os.SEEK_SET); err != nil {
+		if _, err := layerFile.Seek(0, io.SeekStart); err != nil {
 			return nil, err
 		}
 		if err := upload(layerFile, utils.LayerURL(id)); err != nil {
