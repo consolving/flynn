@@ -1,7 +1,7 @@
 package assetmatrix
 
 var scssJS = `
-var sass = require('node-sass');
+var sass = require('sass');
 var readline = require('readline');
 var fs = require('fs');
 var filepath = require('path');
