@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,6 +20,8 @@ type Info struct {
 	InstanceURL string
 	Name        string
 }
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type Instance struct {
 	ID            string         `json:"id,omitempty"`
@@ -65,10 +68,16 @@ func RegisterInstance(info Info) (string, error) {
 	}
 	// TODO(titanous): retry
 	uri := info.ClusterURL + "/instances"
-	res, err := http.Post(uri, "application/json", bytes.NewReader(jsonData))
+	req, err := http.NewRequest("POST", uri, bytes.NewReader(jsonData))
 	if err != nil {
 		return "", err
 	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated && res.StatusCode != http.StatusConflict {
 		return "", urlError("POST", uri, res.StatusCode)
 	}
@@ -80,7 +89,11 @@ func RegisterInstance(info Info) (string, error) {
 
 func GetCluster(uri string) ([]*Instance, error) {
 	uri += "/instances"
-	res, err := http.Get(uri)
+	req, err := http.NewRequest("GET", uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -97,20 +110,22 @@ func GetCluster(uri string) ([]*Instance, error) {
 }
 
 func NewToken() (string, error) {
-	uri := "https://discovery.flynn.io/clusters"
-	if base := os.Getenv("DISCOVERY_SERVER"); base != "" {
-		uri = base + "/clusters"
+	discoveryServer := os.Getenv("DISCOVERY_SERVER")
+	if discoveryServer == "" {
+		return "", errors.New("discoverd: DISCOVERY_SERVER env var is not set")
 	}
+	uri := discoveryServer + "/clusters"
 
 	req, err := http.NewRequest("POST", uri, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("flynn-host/%s %s-%s", version.String(), runtime.GOOS, runtime.GOARCH))
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated {
 		return "", urlError("POST", uri, res.StatusCode)
 	}

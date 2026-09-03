@@ -1025,7 +1025,7 @@ func migrateProcessArgs(tx *postgres.DBTx) error {
 					if strings.HasPrefix(*release.AppName, "redis-") {
 						proc["entrypoint"] = []interface{}{"/bin/start-flynn-redis"}
 					} else {
-						panic(fmt.Sprintf("migration failed to set entrypoint for system app %s", *release.AppName))
+						return fmt.Errorf("migration failed to set entrypoint for system app %s", *release.AppName)
 					}
 				}
 			}

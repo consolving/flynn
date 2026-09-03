@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/exec"
@@ -14,6 +15,8 @@ import (
 )
 
 var ErrNotFound = errors.New("slug not found")
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 func main() {
 	log.SetFlags(0)
@@ -132,7 +135,11 @@ AND artifact_id IN (
 }
 
 func convert(slugbuilder *ct.Artifact, slugURL string) (string, error) {
-	res, err := http.Get(slugURL)
+	req, err := http.NewRequest("GET", slugURL, nil)
+	if err != nil {
+		return "", err
+	}
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}

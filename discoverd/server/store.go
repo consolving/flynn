@@ -473,8 +473,7 @@ func (s *Store) Instances(service string) ([]*discoverd.Instance, error) {
 func (s *Store) instances(service string) []*discoverd.Instance {
 	var a []*discoverd.Instance
 	for _, inst := range s.data.Instances[service] {
-		var other = *inst
-		a = append(a, &other)
+		a = append(a, inst.Clone())
 	}
 	sort.Sort(instanceSlice(a))
 	return a

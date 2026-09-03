@@ -80,7 +80,7 @@ func Wait(conf *Conf, afterConn func(*pgx.Conn) error) *DB {
 		return err
 	})
 	if err != nil {
-		panic(err)
+		shutdown.Fatal(err)
 	}
 	for {
 		var readonly string

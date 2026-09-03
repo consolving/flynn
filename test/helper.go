@@ -204,7 +204,7 @@ func (h *Helper) bootClusterWithConfig(t *c.C, conf *cluster2.BootConfig) *Clust
 	t.Assert(err, c.IsNil)
 	x.controller, _ = controller.NewClientWithConfig("https://controller."+s.Domain, s.Key, controller.Config{Pin: pin})
 
-	Hostnames.Add(t, s.IP, "controller."+s.Domain, "git."+s.Domain, "images."+s.Domain)
+	Hostnames.Add(t, s.IP, "controller."+s.Domain, "git."+s.Domain, "images."+s.Domain, "dashboard."+s.Domain)
 
 	t.Assert(x.flynn("/", "cluster", "add", "--tls-pin", s.Pin, s.Domain, s.Domain, s.Key), Succeeds)
 
@@ -468,10 +468,13 @@ func (h *Helper) createAppWithClient(t *c.C, client controller.Client) (*ct.App,
 			},
 			"minio": {
 				Args: []string{"/bin/minio", "server", "/data"},
-				Env: map[string]string{
-					"MINIO_ACCESS_KEY": minioAccessKey,
-					"MINIO_SECRET_KEY": minioSecretKey,
-				},
+				Env: func() map[string]string {
+					accessKey, secretKey := getMinioCredentials()
+					return map[string]string{
+						"MINIO_ACCESS_KEY": accessKey,
+						"MINIO_SECRET_KEY": secretKey,
+					}
+				}(),
 				Ports: []ct.Port{{
 					Proto: "tcp",
 					Port:  9000,

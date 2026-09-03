@@ -68,8 +68,8 @@ func NewState(id string, stateFilePath string) *State {
 }
 
 /*
-	Restore prior state from the save location defined at construction time.
-	If the state save file is empty, nothing is loaded, and no error is returned.
+Restore prior state from the save location defined at construction time.
+If the state save file is empty, nothing is loaded, and no error is returned.
 */
 func (s *State) Restore(backend Backend, buffers host.LogBuffers) (func(), error) {
 	if err := s.Acquire(); err != nil {
@@ -345,7 +345,7 @@ func (s *State) persist(jobID string) {
 
 		return nil
 	}); err != nil {
-		panic(fmt.Errorf("could not persist to boltdb: %s", err))
+		log.Printf("could not persist state to boltdb: %s", err)
 	}
 }
 
@@ -444,14 +444,24 @@ func (s *State) ClusterJobs() []*host.Job {
 func (s *State) SetContainerIP(jobID string, ip net.IP) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-	s.jobs[jobID].InternalIP = ip.String()
+
+	job, ok := s.jobs[jobID]
+	if !ok {
+		return
+	}
+	job.InternalIP = ip.String()
 	s.persist(jobID)
 }
 
 func (s *State) SetContainerPID(jobID string, pid int) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-	s.jobs[jobID].PID = &pid
+
+	job, ok := s.jobs[jobID]
+	if !ok {
+		return
+	}
+	job.PID = &pid
 	s.persist(jobID)
 }
 

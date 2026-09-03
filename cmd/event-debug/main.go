@@ -10,7 +10,13 @@ import (
 )
 
 func main() {
-	client, err := controller.NewClient("http://100.100.57.4", "05dec3444980970a4697a1e06588c8de")
+	endpoint := os.Getenv("FLYNN_CONTROLLER")
+	key := os.Getenv("FLYNN_KEY")
+	if endpoint == "" || key == "" {
+		fmt.Fprintln(os.Stderr, "usage: FLYNN_CONTROLLER=http://host:port FLYNN_KEY=<api-key> event-debug")
+		os.Exit(1)
+	}
+	client, err := controller.NewClient(endpoint, key)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "client error: %v\n", err)
 		os.Exit(1)

@@ -20,6 +20,8 @@ import (
 // Actual limit is likely ~200mb.
 const GistMaxSize = 195 * 1024 * 1024
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 type Gist struct {
 	URL         string          `json:"html_url,omitempty"`
 	Description string          `json:"description"`
@@ -70,7 +72,7 @@ func (g *Gist) Upload(log log15.Logger) error {
 	req.Header.Set("Content-Type", "application/json")
 
 	log.Info("creating anonymous gist")
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		log.Error("error uploading gist content", "err", err)
 		return err

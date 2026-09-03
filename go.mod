@@ -1,6 +1,6 @@
 module github.com/flynn/flynn
 
-go 1.22
+go 1.23
 
 require (
 	cloud.google.com/go v0.43.0
@@ -26,6 +26,8 @@ require (
 	github.com/golang/groupcache v0.0.0-20160803200408-a6b377e3400b
 	github.com/golang/protobuf v1.4.1
 	github.com/google/go-cmp v0.6.0
+	github.com/gorilla/context v1.1.2
+	github.com/gorilla/sessions v1.4.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/hashicorp/raft v0.0.0-20160603202243-4bcac2adb069
 	github.com/hashicorp/raft-boltdb v0.0.0-20150201200839-d1e82c1ec3f1
@@ -34,6 +36,7 @@ require (
 	github.com/jackc/pgx v0.0.0-20160715195140-558d5550cf5c
 	github.com/jtacoma/uritemplates v1.0.0
 	github.com/julienschmidt/httprouter v0.0.0-20140925104356-46807412fe50
+	github.com/jvatic/asset-matrix-go v0.0.0-20190524161137-550750b01e75
 	github.com/kardianos/osext v0.0.0-20150223151934-ccfcd0245381
 	github.com/kavu/go_reuseport v1.4.0
 	github.com/kr/pty v1.1.8
@@ -77,6 +80,7 @@ require (
 	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
+	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect

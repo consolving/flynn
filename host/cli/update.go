@@ -50,7 +50,7 @@ var minVersion = "v20161108.0"
 var ErrIncompatibleVersion = fmt.Errorf(`
 Versions prior to %s cannot be updated in-place to this version of Flynn.
 In order to update to this version a cluster backup/restore is required.
-Please see the updating documentation at https://flynn.io/docs/production#backup/restore.
+See https://github.com/consolving/flynn for details.
 `[1:], minVersion)
 
 func runUpdate(args *docopt.Args) error {
