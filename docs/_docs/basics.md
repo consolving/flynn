@@ -3,7 +3,7 @@ title: Basics
 order: 2
 ---
 
-This guide assumes you have a running Flynn cluster and the `flynn` CLI configured. If not, follow the [Installation Guide](/docs/installation/) first.
+This guide assumes you have a running Flynn cluster and the `flynn` CLI configured. If not, follow the [Installation Guide](/flynn/docs/installation/) first.
 
 ## Deploy an App
 
