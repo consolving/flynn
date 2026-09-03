@@ -23,7 +23,7 @@ exclude:
 collections:
   docs:
     output: true
-    permalink: /docs/:path/
+    permalink: /flynn/docs/:path/
 
 defaults:
   - scope:
@@ -36,28 +36,28 @@ nav:
   - title: Getting Started
     children:
       - title: Installation
-        url: /docs/installation/
+        url: /flynn/docs/installation/
       - title: Basics
-        url: /docs/basics/
+        url: /flynn/docs/basics/
   - title: Using Flynn
     children:
       - title: Apps
-        url: /docs/apps/
+        url: /flynn/docs/apps/
       - title: Databases
-        url: /docs/databases/
+        url: /flynn/docs/databases/
       - title: Docker
-        url: /docs/docker/
+        url: /flynn/docs/docker/
       - title: CLI
-        url: /docs/cli/
+        url: /flynn/docs/cli/
   - title: Operating
     children:
       - title: Production
-        url: /docs/production/
+        url: /flynn/docs/production/
       - title: Security
-        url: /docs/security/
+        url: /flynn/docs/security/
   - title: Reference
     children:
       - title: Architecture
-        url: /docs/architecture/
+        url: /flynn/docs/architecture/
       - title: Contributing
-        url: /docs/contributing/
+        url: /flynn/docs/contributing/

@@ -140,11 +140,9 @@ Key dependencies include:
 
 **Current config** (`tup.config`):
 ```
-CONFIG_IMAGE_REPOSITORY=https://dl.flynn.io/tuf
+CONFIG_IMAGE_REPOSITORY=https://consolving.github.io/flynn-tuf-repo/
 CONFIG_TUF_ROOT_KEYS=[...]
 ```
-
-**Note**: The TUF repository (`dl.flynn.io`) has been shut down. This must be addressed for building.
 
 ---
 
