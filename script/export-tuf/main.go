@@ -615,7 +615,7 @@ func (e *exporter) buildComponentImage(spec imageSpec) error {
 // Results are cached by package script path so multiple images sharing the same script
 // only build the layer once.
 func (e *exporter) buildPackageLayer(spec imageSpec) (*ct.ImageLayer, error) {
-	// Check cache
+	// Check in-memory cache
 	if layer, ok := e.packageLayers[spec.PackageScript]; ok {
 		fmt.Printf("    Using cached package layer for %s\n", spec.PackageScript)
 		return layer, nil
@@ -645,6 +645,18 @@ func (e *exporter) buildPackageLayer(spec imageSpec) (*ct.ImageLayer, error) {
 	}
 	baseLayerID := baseLayers[0].ID
 	baseSquashfs := filepath.Join(e.layerCache, baseLayerID+".squashfs")
+
+	// Check disk cache for a previously-built package layer keyed by the
+	// package script and base layer. This lets interrupted export-tuf runs
+	// resume without rebuilding every package layer from scratch.
+	cacheKey, err := e.packageLayerCacheKey(spec.PackageScript, baseLayerID)
+	if err != nil {
+		return nil, fmt.Errorf("computing package layer cache key: %s", err)
+	}
+	cachePath := filepath.Join(e.layerCache, "pkg", cacheKey+".squashfs")
+	if layer, err := e.loadCachedPackageLayer(cachePath, spec.PackageScript); err == nil {
+		return layer, nil
+	}
 
 	// Create temp dirs for overlay mount
 	workDir, err := os.MkdirTemp("", "flynn-pkg-"+spec.Name)
@@ -747,11 +759,52 @@ func (e *exporter) buildPackageLayer(spec imageSpec) (*ct.ImageLayer, error) {
 		return nil, err
 	}
 
+	// Persist to disk cache so future runs can skip the build
+	if err := e.saveCachedPackageLayer(cachePath, squashfsPath); err != nil {
+		fmt.Fprintf(os.Stderr, "    warning: saving package layer cache: %s\n", err)
+	}
+
 	// Cache it
 	e.packageLayers[spec.PackageScript] = layer
 	fmt.Printf("    -> package layer: id=%s size=%d\n", layer.ID[:16], layer.Length)
 
 	return layer, nil
+}
+
+// packageLayerCacheKey returns a deterministic cache key for a package script
+// combined with the base layer it runs on. Changing either invalidates the cache.
+func (e *exporter) packageLayerCacheKey(scriptRel, baseLayerID string) (string, error) {
+	scriptData, err := os.ReadFile(filepath.Join(e.sourceDir, scriptRel))
+	if err != nil {
+		return "", err
+	}
+	h := sha512.New512_256()
+	h.Write(scriptData)
+	h.Write([]byte(baseLayerID))
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// loadCachedPackageLayer loads a package layer from disk if it exists and is valid.
+func (e *exporter) loadCachedPackageLayer(cachePath, scriptRel string) (*ct.ImageLayer, error) {
+	if _, err := os.Stat(cachePath); err != nil {
+		return nil, err
+	}
+	layer, err := e.importSquashfs(cachePath)
+	if err != nil {
+		return nil, fmt.Errorf("importing cached package layer: %s", err)
+	}
+	e.packageLayers[scriptRel] = layer
+	fmt.Printf("    Using disk-cached package layer: %s\n", filepath.Base(cachePath))
+	fmt.Printf("    -> package layer: id=%s size=%d\n", layer.ID[:16], layer.Length)
+	return layer, nil
+}
+
+// saveCachedPackageLayer copies a built package layer squashfs to the disk cache.
+func (e *exporter) saveCachedPackageLayer(cachePath, squashfsPath string) error {
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		return err
+	}
+	return copyFile(squashfsPath, cachePath, 0644)
 }
 
 // imageSpecs returns the specifications for all component images.
@@ -835,6 +888,16 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-status"},
+			},
+		},
+		{
+			Name: "dashboard",
+			Base: "busybox",
+			Binaries: map[string]string{
+				"flynn-dashboard": "/bin/flynn-dashboard",
+			},
+			Entrypoint: &ct.ImageEntrypoint{
+				Args: []string{"/bin/flynn-dashboard"},
 			},
 		},
 		{
