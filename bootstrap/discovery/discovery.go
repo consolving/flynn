@@ -21,6 +21,8 @@ type Info struct {
 	Name        string
 }
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 type Instance struct {
 	ID            string         `json:"id,omitempty"`
 	ClusterID     string         `json:"cluster_id,omitempty"`
@@ -66,7 +68,12 @@ func RegisterInstance(info Info) (string, error) {
 	}
 	// TODO(titanous): retry
 	uri := info.ClusterURL + "/instances"
-	res, err := http.Post(uri, "application/json", bytes.NewReader(jsonData))
+	req, err := http.NewRequest("POST", uri, bytes.NewReader(jsonData))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +89,11 @@ func RegisterInstance(info Info) (string, error) {
 
 func GetCluster(uri string) ([]*Instance, error) {
 	uri += "/instances"
-	res, err := http.Get(uri)
+	req, err := http.NewRequest("GET", uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +121,7 @@ func NewToken() (string, error) {
 		return "", err
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("flynn-host/%s %s-%s", version.String(), runtime.GOOS, runtime.GOARCH))
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}

@@ -14,8 +14,8 @@ import (
 	"github.com/flynn/flynn/pkg/status"
 	"github.com/flynn/flynn/pkg/version"
 	"github.com/flynn/flynn/updater/types"
-	"github.com/mattn/go-colorable"
 	"github.com/inconshreveable/log15"
+	"github.com/mattn/go-colorable"
 )
 
 var redisImage, slugBuilder, slugRunner *ct.Artifact
@@ -25,6 +25,8 @@ var redisImage, slugBuilder, slugRunner *ct.Artifact
 var isTTY = flag.Bool("tty", false, "use a TTY log formatter")
 
 const deployTimeout = 30 * time.Minute
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 func main() {
 	flag.Parse()
@@ -51,7 +53,7 @@ func run() error {
 	}
 	req.Header = make(http.Header)
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		log.Error("error getting cluster status", "err", err)
 		return err

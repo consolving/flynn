@@ -32,6 +32,8 @@ const (
 	oobRedirectURI = "urn:ietf:wg:oauth:2.0:oob"
 )
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 func Run(args *docopt.Args) error {
 	flynnrc, err := config.ReadFile(config.DefaultPath())
 	if err != nil && !os.IsNotExist(err) {
@@ -270,7 +272,7 @@ func getClusterList(audiencesURL string, t *oauth2.Token) ([]*cluster, error) {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "RefreshToken "+t.RefreshToken)
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

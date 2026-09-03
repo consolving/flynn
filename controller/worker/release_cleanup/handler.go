@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/flynn/flynn/controller/client"
 	ct "github.com/flynn/flynn/controller/types"
@@ -11,6 +12,8 @@ import (
 	"github.com/flynn/que-go"
 	"github.com/inconshreveable/log15"
 )
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type context struct {
 	db     *postgres.DB
@@ -58,7 +61,7 @@ func deleteFile(uri string) error {
 	if err != nil {
 		return err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

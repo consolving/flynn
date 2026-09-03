@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	controller "github.com/flynn/flynn/controller/client"
 	ct "github.com/flynn/flynn/controller/types"
@@ -12,6 +13,8 @@ import (
 	"github.com/flynn/que-go"
 	"github.com/inconshreveable/log15"
 )
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type context struct {
 	db     *postgres.DB
@@ -108,7 +111,7 @@ func (c *context) HandleAppDeletion(job *que.Job) (err error) {
 			log.Error("error creating app cache delete request", "err", err)
 			return err
 		}
-		res, err := http.DefaultClient.Do(req)
+		res, err := httpClient.Do(req)
 		if err != nil {
 			log.Error("error performing app cache delete request", "err", err)
 			return err

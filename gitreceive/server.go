@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/flynn/flynn/controller/authorizer"
 	controller "github.com/flynn/flynn/controller/client"
@@ -69,6 +70,8 @@ type gitService struct {
 type gitEnv struct {
 	App string
 }
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // Routing table
 var gitServices = [...]gitService{
@@ -401,7 +404,7 @@ func uploadRepo(path, cacheKey string) error {
 
 	// upload the tarball to the blobstore
 	req, _ := http.NewRequest("PUT", blobstoreCacheURL(cacheKey), r)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
