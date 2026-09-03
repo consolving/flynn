@@ -45,11 +45,11 @@ current value):
 
 ```bash
 # Top-level flynn-host.gz target (hashed filename)
-curl -fsSL https://consolving.github.io/flynn-tuf-repo/repository/12dc0306be187d22869f23254a4904e9581bc371787d0cffcc8e189724ae931317ae740528cb4e9a1d126b709844ee9c5399acd131fe70d734f90b1d512d0e48.flynn-host.gz | \
+curl -fsSL https://consolving.github.io/flynn-tuf-repo/repository/targets/v20260902.0/c5285f69d8160b0872b2b1a0dbd015a72922c626b3befa8c4bd065b72abc7e76d0d82a85100a39e352dded86641bbdc740e30d4e99503f4a9444fcd21623c9a3.flynn-host.gz | \
   gunzip > /tmp/flynn-host && chmod +x /tmp/flynn-host && sudo mv /tmp/flynn-host /usr/local/bin/
 
-# Versioned flynn-init.gz target (example: v20260811.0)
-curl -fsSL https://consolving.github.io/flynn-tuf-repo/repository/v20260811.0/447ea87268265337ef12991116b7bc54276374b1a2e4054a05eedfa44bf4ade329f9fb5771b14bf70b3c5058f82d93ce02ad88fc2f74e7e102048f4fc25d6d51.flynn-init.gz | \
+# Versioned flynn-init.gz target (v20260902.0)
+curl -fsSL https://consolving.github.io/flynn-tuf-repo/repository/targets/v20260902.0/644d59669a178a84331d09253c43f1f7c4a05d3d0860477cc35be282b7197966d4e36f7067605e29f8f61032ab54929f0d65b4161aef322d73d1671318209b43.flynn-init.gz | \
   gunzip > /tmp/flynn-init && chmod +x /tmp/flynn-init && sudo mv /tmp/flynn-init /usr/local/bin/
 ```
 

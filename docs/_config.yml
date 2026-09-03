@@ -1,6 +1,5 @@
 title: Flynn Documentation
 description: Flynn is an open-source PaaS for running applications in production
-baseurl: "/flynn"
 url: "https://consolving.github.io"
 theme: minima
 

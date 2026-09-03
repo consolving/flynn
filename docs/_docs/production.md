@@ -168,7 +168,7 @@ For external log shipping, configure a syslog drain.
 Flynn uses TUF for version management. Pin to a specific version:
 
 ```bash
-flynn-host download --version v20260811.0
+flynn-host download --version v20260902.0
 ```
 
 ## Adding/Removing Hosts

@@ -8,7 +8,7 @@ Flynn is open source and welcomes contributions.
 ## Repository
 
 - **Source**: [github.com/consolving/flynn](https://github.com/consolving/flynn)
-- **Language**: Go (1.22)
+- **Language**: Go (1.23)
 - **Module**: `github.com/flynn/flynn`
 
 ## Building
