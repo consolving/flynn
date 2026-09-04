@@ -592,18 +592,16 @@ func (s *State) AddListener(jobID string) chan host.Event {
 }
 
 func (s *State) RemoveListener(jobID string, ch chan host.Event) {
-	go func() {
-		// drain to prevent deadlock while removing the listener
-		for range ch {
-		}
-	}()
+	// remove and close the channel while holding the write lock so no
+	// sendEvent goroutine can be sending to it concurrently (they hold the
+	// read lock). This prevents sending on a closed channel.
 	s.listenMtx.Lock()
 	delete(s.listeners[jobID], ch)
 	if len(s.listeners[jobID]) == 0 {
 		delete(s.listeners, jobID)
 	}
-	s.listenMtx.Unlock()
 	close(ch)
+	s.listenMtx.Unlock()
 }
 
 func (s *State) SendCleanupEvent(jobID string) {
@@ -620,11 +618,23 @@ func (s *State) sendEvent(job *host.ActiveJob, event host.JobEventType) {
 		s.listenMtx.RLock()
 		defer s.listenMtx.RUnlock()
 		e := host.Event{JobID: job.Job.ID, Job: j, Event: event}
+		// deliver to each listener with a non-blocking send. Since these
+		// are unbuffered channels, a blocking send could wait indefinitely
+		// for a slow/disconnecting listener while holding the read lock,
+		// which would prevent RemoveListener from acquiring the write lock
+		// and cause a deadlock. A non-blocking send also guarantees we never
+		// send on a channel that RemoveListener has closed.
+		deliver := func(ch chan host.Event) {
+			select {
+			case ch <- e:
+			default:
+			}
+		}
 		for ch := range s.listeners["all"] {
-			ch <- e
+			deliver(ch)
 		}
 		for ch := range s.listeners[job.Job.ID] {
-			ch <- e
+			deliver(ch)
 		}
 	}()
 }
