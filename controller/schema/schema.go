@@ -9,14 +9,21 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/cupcake/jsonschema"
 	ct "github.com/flynn/flynn/controller/types"
 )
 
-var schemaCache map[string]*jsonschema.Schema
+var (
+	schemaCacheMu sync.RWMutex
+	schemaCache   map[string]*jsonschema.Schema
+)
 
 func Load(schemaRoot string) error {
+	schemaCacheMu.Lock()
+	defer schemaCacheMu.Unlock()
+
 	if schemaCache != nil {
 		return nil
 	}
@@ -53,6 +60,9 @@ func Load(schemaRoot string) error {
 }
 
 func schemaForType(thing interface{}) *jsonschema.Schema {
+	schemaCacheMu.RLock()
+	defer schemaCacheMu.RUnlock()
+
 	name := strings.ToLower(reflect.Indirect(reflect.ValueOf(thing)).Type().Name())
 	if name == "newjob" {
 		name = "new_job"
