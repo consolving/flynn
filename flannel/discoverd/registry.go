@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/flynn/flynn/discoverd/client"
@@ -89,6 +90,9 @@ func (r *registry) UpdateSubnet(sn, data string, ttl uint64) (*subnet.Response, 
 	return newResponse(net), nil
 }
 
+// knownSubnetsMu protects knownSubnets from concurrent access.
+var knownSubnetsMu sync.Mutex
+
 // knownSubnets is updated each time we receive a service metadata event so
 // that we can calculate which subnets are new and should be returned from
 // WatchSubnets
@@ -111,6 +115,7 @@ func (r *registry) WatchSubnets(since uint64, stop chan bool) (*subnet.Response,
 				return nil, err
 			}
 			subnets := make(map[string][]byte)
+			knownSubnetsMu.Lock()
 			for subnet, data := range net.Subnets {
 				if known, ok := knownSubnets[subnet]; ok && reflect.DeepEqual(known, data) {
 					continue
@@ -118,6 +123,7 @@ func (r *registry) WatchSubnets(since uint64, stop chan bool) (*subnet.Response,
 				subnets[subnet] = []byte(*data)
 			}
 			knownSubnets = net.Subnets
+			knownSubnetsMu.Unlock()
 			if event.ServiceMeta.Index >= since {
 				return &subnet.Response{Subnets: subnets, Index: event.ServiceMeta.Index}, nil
 			}
