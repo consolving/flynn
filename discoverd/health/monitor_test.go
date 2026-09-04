@@ -5,6 +5,7 @@ import (
 	"time"
 
 	. "github.com/flynn/go-check"
+	"github.com/flynn/flynn/pkg/stream"
 )
 
 type MonitorSuite struct{}
@@ -21,10 +22,9 @@ func (MonitorSuite) TestMonitor(c *C) {
 		event MonitorStatus
 	}
 
-	checker := func(steps []step, threshold int) (chan MonitorEvent, chan MonitorEvent) {
+	checker := func(steps []step, threshold int) (chan MonitorEvent, chan MonitorEvent, stream.Stream) {
 		var i int
 		var finished bool
-		done := make(chan struct{})
 		expectedEvents := make(chan MonitorEvent, 1)
 		actualEvents := make(chan MonitorEvent)
 
@@ -34,10 +34,8 @@ func (MonitorSuite) TestMonitor(c *C) {
 			}
 			defer func() {
 				if i >= len(steps) {
-					done <- struct{}{}
-					// ensure the stream has been closed before returning
-					<-done
 					finished = true
+					close(expectedEvents)
 				}
 			}()
 
@@ -60,18 +58,12 @@ func (MonitorSuite) TestMonitor(c *C) {
 			return nil
 		})
 
-		stream := Monitor{
+		s := Monitor{
 			Threshold:     threshold,
 			StartInterval: time.Nanosecond,
 			Interval:      time.Nanosecond,
 		}.Run(check, actualEvents)
-		go func() {
-			<-done
-			stream.Close()
-			done <- struct{}{}
-		}()
-
-		return expectedEvents, actualEvents
+		return expectedEvents, actualEvents, s
 	}
 
 	for _, t := range []struct {
@@ -162,17 +154,14 @@ func (MonitorSuite) TestMonitor(c *C) {
 	} {
 		c.Log(t.name)
 
-		expectedEvents, actualEvents := checker(t.steps, t.threshold)
-		for actual := range actualEvents {
-			select {
-			case expected := <-expectedEvents:
-				// functions are not comparable, so we check it and then nil it
-				c.Assert(actual.Check, FitsTypeOf, CheckFunc(nil))
-				actual.Check = nil
-				c.Assert(actual, DeepEquals, expected)
-			default:
-				c.Fatalf("unexpected event %#v", actual)
-			}
+		expectedEvents, actualEvents, s := checker(t.steps, t.threshold)
+		for expected := range expectedEvents {
+			actual := <-actualEvents
+			// functions are not comparable, so we check it and then nil it
+			c.Assert(actual.Check, FitsTypeOf, CheckFunc(nil))
+			actual.Check = nil
+			c.Assert(actual, DeepEquals, expected)
 		}
+		s.Close()
 	}
 }
