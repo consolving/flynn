@@ -164,8 +164,12 @@ type LibcontainerBackend struct {
 	envMtx     sync.RWMutex
 	defaultEnv map[string]string
 
-	discoverdConfigured chan struct{}
-	networkConfigured   chan struct{}
+	// discoverdConfigured is closed once discoverd has been configured via
+	// SetDefaultEnv. discoverdConfiguredSet is guarded by envMtx and tracks
+	// whether the channel has already been closed to prevent a double close.
+	discoverdConfigured    chan struct{}
+	discoverdConfiguredSet bool
+	networkConfigured      chan struct{}
 
 	globalStateMtx sync.Mutex
 	globalState    *libcontainerGlobalState
@@ -419,11 +423,14 @@ func (l *LibcontainerBackend) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType,
 
 func (l *LibcontainerBackend) SetDefaultEnv(k, v string) {
 	l.envMtx.Lock()
+	defer l.envMtx.Unlock()
 	l.defaultEnv[k] = v
-	l.envMtx.Unlock()
 	if k == "DISCOVERD" {
 		l.discoverdClient = discoverd.NewClientWithURL(v)
-		close(l.discoverdConfigured)
+		if !l.discoverdConfiguredSet {
+			l.discoverdConfiguredSet = true
+			close(l.discoverdConfigured)
+		}
 	}
 }
 
