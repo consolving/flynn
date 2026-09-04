@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -73,6 +74,11 @@ type Build struct {
 	IssueLink   string       `json:"issue_link"`
 	Version     BuildVersion `json:"version"`
 	Failures    []string     `json:"failures"`
+
+	// mu guards the mutable fields above, which are read and written
+	// concurrently by the build goroutine and the status update goroutines
+	// it spawns.
+	mu sync.Mutex
 }
 
 func (b *Build) URL() string {
@@ -334,15 +340,16 @@ func (r *Runner) build(b *Build) (err error) {
 	var failureBuf bytes.Buffer
 	defer func() {
 		// parse the failures
+		var failures []string
 		s := bufio.NewScanner(&failureBuf)
 		for s.Scan() {
 			if match := failPattern.FindSubmatch(s.Bytes()); match != nil {
-				b.Failures = append(b.Failures, string(match[1]))
+				failures = append(failures, string(match[1]))
 			}
 		}
 
-		b.Duration = time.Since(start).String()
-		fmt.Fprintf(mainLog, "build finished in %s\n", b.Duration)
+		duration := time.Since(start).String()
+		fmt.Fprintf(mainLog, "build finished in %s\n", duration)
 		if err != nil {
 			fmt.Fprintf(mainLog, "build error: %s\n", err)
 			fmt.Fprintln(mainLog, "DUMPING LOGS")
@@ -350,10 +357,19 @@ func (r *Runner) build(b *Build) (err error) {
 		}
 		c.Shutdown()
 		buildLog.Close()
-		b.LogURL = r.uploadToS3(logFile, b, buildLog.Boundary())
+		logURL := r.uploadToS3(logFile, b, buildLog.Boundary())
 		logFile.Close()
 		os.RemoveAll(b.LogFile)
+
+		// commit the final state under the lock so it is applied atomically
+		// with respect to the status update goroutines
+		b.mu.Lock()
+		b.Failures = failures
+		b.Duration = duration
+		b.LogURL = logURL
 		b.LogFile = ""
+		b.mu.Unlock()
+
 		if err == nil {
 			log.Printf("build %s passed!\n", b.ID)
 			r.updateStatus(b, "success")
@@ -809,19 +825,28 @@ func (r *Runner) updateStatus(b *Build, state string) {
 	go func() {
 		log.Printf("updateStatus: %s %s\n", state, b.Commit)
 
+		// snapshot the mutable fields under the lock and persist, so this
+		// does not race with the build goroutine committing Failures,
+		// Duration, LogURL and LogFile
+		b.mu.Lock()
 		b.State = state
-		if err := r.save(b); err != nil {
+		commit := b.Commit
+		failures := len(b.Failures)
+		targetURL := b.URL()
+		err := r.save(b)
+		b.mu.Unlock()
+		if err != nil {
 			log.Printf("updateStatus: could not save build: %s", err)
 		}
 
-		url := fmt.Sprintf("https://api.github.com/repos/flynn/flynn/statuses/%s", b.Commit)
+		url := fmt.Sprintf("https://api.github.com/repos/flynn/flynn/statuses/%s", commit)
 		description := descriptions[state]
-		if len(b.Failures) > 0 {
-			description += fmt.Sprintf(" [%d failure(s)]", len(b.Failures))
+		if failures > 0 {
+			description += fmt.Sprintf(" [%d failure(s)]", failures)
 		}
 		status := Status{
 			State:       state,
-			TargetURL:   b.URL(),
+			TargetURL:   targetURL,
 			Description: description,
 			Context:     "continuous-integration/flynn",
 		}
