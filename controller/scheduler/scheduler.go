@@ -1168,6 +1168,11 @@ func (s *Scheduler) HandlePlacementRequest(req *PlacementRequest) {
 			req.Job.Volumes[i] = vol
 		}
 
+		// snapshot the assigned volumes so the StartJob goroutine can
+		// create pending volumes on the host without racing with
+		// handleActiveJob replacing job.Volumes
+		req.Volumes = req.Job.Volumes
+
 		if req.Host != nil {
 			log.Info(fmt.Sprintf("placed job on host with existing %s volumes", req.Job.Type), "host.id", req.Host.ID)
 		}
@@ -1611,7 +1616,7 @@ outer:
 			continue
 		}
 
-		for _, vol := range job.Volumes {
+		for _, vol := range req.Volumes {
 			if vol.GetState() == ct.VolumeStatePending {
 				log.Info("creating new volume", "host.id", req.Host.ID, "vol.id", vol.ID, "vol.path", vol.Path)
 				if err := req.Host.client.CreateVolume("default", vol.Info()); err != nil {
@@ -1641,6 +1646,14 @@ type PlacementRequest struct {
 	Config *host.Job
 	Host   *Host
 	Err    chan error
+
+	// Volumes is a snapshot of the job's assigned volumes taken when the
+	// placement request is handled. It is populated by the main scheduler
+	// loop and consumed by the StartJob goroutine which creates any
+	// pending volumes on the selected host. The snapshot avoids racing
+	// with handleActiveJob, which may replace job.Volumes in the main
+	// loop while the StartJob goroutine iterates it.
+	Volumes []*Volume
 
 	// ExcludeHosts is a set of host IDs that should be avoided when
 	// placing the job, typically because a previous attempt to add the
