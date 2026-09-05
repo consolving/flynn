@@ -103,6 +103,10 @@ func (c *fakeLegoClient) Renew(cert certificate.Resource, bundle, mustStaple boo
 	return c.Obtain(certificate.ObtainRequest{Domains: []string{cert.Domain}})
 }
 
+func (c *fakeLegoClient) Revoke(cert []byte) error {
+	return nil
+}
+
 func makeCert(t *testing.T, host string) *certgen.Certificate {
 	c, err := certgen.Generate(certgen.Params{Hosts: []string{host}})
 	if err != nil {
@@ -253,6 +257,33 @@ func TestManagerRenew(t *testing.T) {
 	}
 	if stored.CertURL != "https://acme/cert/new" {
 		t.Errorf("stored cert URL not updated: %q", stored.CertURL)
+	}
+}
+
+func TestManagerRevoke(t *testing.T) {
+	store := newFakeStore()
+	cfg := DefaultConfig()
+	cfg.Email = "test@example.com"
+	cfg.ChallengeType = ChallengeHTTP01
+
+	oldCert := makeCert(t, "example.com")
+	store.SaveCertificate(&CertificateData{
+		CertPEM:      []byte(oldCert.PEM),
+		KeyPEM:       []byte(oldCert.KeyPEM),
+		Domains:      []string{"example.com"},
+		AccountEmail: cfg.Email,
+		CertURL:      "https://acme/cert/old",
+		ExpiresAt:    time.Now().Add(80 * 24 * time.Hour),
+	})
+
+	m := NewManager(cfg, store)
+	m.client = &fakeLegoClient{}
+
+	if err := m.Revoke(store.certs["example.com"]); err != nil {
+		t.Fatalf("Revoke failed: %v", err)
+	}
+	if _, err := store.LoadCertificate("example.com"); err == nil {
+		t.Error("certificate still present after revoke")
 	}
 }
 

@@ -61,24 +61,8 @@ func (r *Renewer) loop() {
 }
 
 func (r *Renewer) renewAll() {
-	certs, err := r.manager.store.ListCertificates()
-	if err != nil {
-		log.Printf("autocert: failed to list certificates for renewal: %v", err)
-		return
-	}
-	for _, cert := range certs {
-		if len(cert.Domains) == 0 || cert.ExpiresAt.IsZero() {
-			continue
-		}
-		if time.Until(cert.ExpiresAt) > r.manager.config.RenewBefore {
-			continue
-		}
-		log.Printf("autocert: renewing certificate for %v (expires %s)", cert.Domains, cert.ExpiresAt)
-		if _, err := r.manager.Renew(cert); err != nil {
-			log.Printf("autocert: failed to renew certificate for %v: %v", cert.Domains, err)
-			continue
-		}
-		log.Printf("autocert: renewed certificate for %v", cert.Domains)
+	for _, err := range r.manager.RenewDue() {
+		log.Print(err)
 	}
 }
 

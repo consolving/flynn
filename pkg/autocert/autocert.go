@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -20,6 +21,7 @@ type legoClient interface {
 	Register(opts registration.RegisterOptions) (*registration.Resource, error)
 	Obtain(req certificate.ObtainRequest) (*certificate.Resource, error)
 	Renew(cert certificate.Resource, bundle, mustStaple bool, preferredChain string) (*certificate.Resource, error)
+	Revoke(cert []byte) error
 }
 
 type legoClientAdapter struct {
@@ -36,6 +38,10 @@ func (c *legoClientAdapter) Obtain(req certificate.ObtainRequest) (*certificate.
 
 func (c *legoClientAdapter) Renew(cert certificate.Resource, bundle, mustStaple bool, preferredChain string) (*certificate.Resource, error) {
 	return c.client.Certificate.Renew(cert, bundle, mustStaple, preferredChain)
+}
+
+func (c *legoClientAdapter) Revoke(cert []byte) error {
+	return c.client.Certificate.Revoke(cert)
 }
 
 // Manager orchestrates ACME certificate provisioning and renewal.
@@ -61,6 +67,12 @@ func NewManager(config *Config, store Store) *Manager {
 // HTTP01Handler serves HTTP-01 challenge responses. Mount it at
 // /.well-known/acme-challenge/ on port 80 before TLS termination.
 func (m *Manager) HTTP01Handler() http.Handler {
+	return m.httpProvider
+}
+
+// HTTP01Provider returns the HTTP-01 challenge provider, used to present and
+// clean up challenge responses.
+func (m *Manager) HTTP01Provider() *HTTP01Provider {
 	return m.httpProvider
 }
 
@@ -144,6 +156,57 @@ func (m *Manager) Renew(cert *CertificateData) (*CertificateData, error) {
 		return nil, fmt.Errorf("autocert: failed to store renewed certificate: %w", err)
 	}
 	return newCert, nil
+}
+
+// Revoke revokes a certificate with the ACME server and removes it from
+// storage.
+func (m *Manager) Revoke(cert *CertificateData) error {
+	if cert == nil {
+		return errors.New("autocert: certificate is nil")
+	}
+
+	account, err := m.loadOrCreateAccount()
+	if err != nil {
+		return err
+	}
+	if err := m.initClient(account); err != nil {
+		return err
+	}
+
+	if err := m.client.Revoke(cert.CertPEM); err != nil {
+		return fmt.Errorf("autocert: failed to revoke certificate: %w", err)
+	}
+	if len(cert.Domains) > 0 {
+		if err := m.store.DeleteCertificate(cert.Domains[0]); err != nil {
+			return fmt.Errorf("autocert: failed to delete revoked certificate: %w", err)
+		}
+	}
+	return nil
+}
+
+// RenewDue renews all stored certificates that are within RenewBefore of
+// expiry. It returns the errors for any certificates that failed to renew.
+func (m *Manager) RenewDue() []error {
+	certs, err := m.store.ListCertificates()
+	if err != nil {
+		return []error{fmt.Errorf("autocert: failed to list certificates for renewal: %w", err)}
+	}
+	var errs []error
+	for _, cert := range certs {
+		if len(cert.Domains) == 0 || cert.ExpiresAt.IsZero() {
+			continue
+		}
+		if time.Until(cert.ExpiresAt) > m.config.RenewBefore {
+			continue
+		}
+		log.Printf("autocert: renewing certificate for %v (expires %s)", cert.Domains, cert.ExpiresAt)
+		if _, err := m.Renew(cert); err != nil {
+			errs = append(errs, fmt.Errorf("autocert: failed to renew certificate for %v: %w", cert.Domains, err))
+			continue
+		}
+		log.Printf("autocert: renewed certificate for %v", cert.Domains)
+	}
+	return errs
 }
 
 // initClient creates the lego client and configures challenge providers.
