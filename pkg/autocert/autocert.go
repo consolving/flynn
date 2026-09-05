@@ -223,6 +223,10 @@ func (m *Manager) initClient(account *Account) error {
 	}
 	legoCfg.Certificate.KeyType = certcrypto.RSA2048
 
+	if m.config.HTTPClient != nil {
+		legoCfg.HTTPClient = m.config.HTTPClient
+	}
+
 	client, err := lego.NewClient(legoCfg)
 	if err != nil {
 		return fmt.Errorf("autocert: failed to create lego client: %w", err)

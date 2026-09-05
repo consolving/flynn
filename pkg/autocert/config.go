@@ -5,6 +5,7 @@ package autocert
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -53,6 +54,10 @@ type Config struct {
 	// DNSConfig holds provider-specific settings. For AutoDNS:
 	//   api_user, api_password, endpoint, context, ttl.
 	DNSConfig map[string]string `json:"dns_config"`
+
+	// HTTPClient, if set, is used for ACME directory and challenge HTTP
+	// requests. Tests use this to trust a custom CA such as Pebble.
+	HTTPClient *http.Client `json:"-"`
 
 	// RenewBefore is the time before expiry to trigger renewal.
 	// Defaults to DefaultRenewBefore.
