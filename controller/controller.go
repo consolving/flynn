@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"context"
 	"github.com/flynn/flynn/controller/authorizer"
 	"github.com/flynn/flynn/controller/data"
 	"github.com/flynn/flynn/controller/name"
@@ -22,6 +23,7 @@ import (
 	discoverd "github.com/flynn/flynn/discoverd/client"
 	logaggc "github.com/flynn/flynn/logaggregator/client"
 	logagg "github.com/flynn/flynn/logaggregator/types"
+	"github.com/flynn/flynn/pkg/autocert"
 	"github.com/flynn/flynn/pkg/cluster"
 	"github.com/flynn/flynn/pkg/ctxhelper"
 	"github.com/flynn/flynn/pkg/httphelper"
@@ -33,7 +35,6 @@ import (
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/inconshreveable/log15"
 	"github.com/julienschmidt/httprouter"
-	"context"
 	"google.golang.org/grpc"
 )
 
@@ -184,6 +185,7 @@ func appHandler(c handlerConfig) (http.Handler, *grpc.Server, *controllerAPI) {
 	backupRepo := data.NewBackupRepo(c.db)
 	sinkRepo := data.NewSinkRepo(c.db)
 	volumeRepo := data.NewVolumeRepo(c.db)
+	acmeStore := data.NewACMEStore(c.db)
 
 	api := controllerAPI{
 		domainMigrationRepo: domainMigrationRepo,
@@ -206,7 +208,14 @@ func appHandler(c handlerConfig) (http.Handler, *grpc.Server, *controllerAPI) {
 		caCert:              c.caCert,
 		config:              c,
 		authorizer:          authorizer.New(c.keys, c.keyIDs, c.tokenKey, c.tokenMaxValidity),
+		acmeStore:           acmeStore,
 	}
+
+	if err := api.setACMEConfig(autocertConfigFromEnv()); err != nil {
+		logger.Warn("invalid ACME config, disabling LetsEncrypt", "err", err)
+		api.setACMEConfig(&autocert.Config{Enabled: false})
+	}
+	api.acmeRenewalStop = api.acmeRenewalLoop(24 * time.Hour)
 
 	shutdown.BeforeExit(api.Shutdown)
 
@@ -276,6 +285,15 @@ func appHandler(c handlerConfig) (http.Handler, *grpc.Server, *controllerAPI) {
 	httpRouter.PUT("/apps/:apps_id/routes/:routes_type/:routes_id", httphelper.WrapHandler(api.appLookup(api.UpdateRoute)))
 	httpRouter.DELETE("/apps/:apps_id/routes/:routes_type/:routes_id", httphelper.WrapHandler(api.appLookup(api.DeleteRoute)))
 
+	httpRouter.POST("/certs/letsencrypt", httphelper.WrapHandler(api.ProvisionACME))
+	httpRouter.GET("/certs/letsencrypt", httphelper.WrapHandler(api.ListACMECerts))
+	httpRouter.GET("/certs/letsencrypt/config", httphelper.WrapHandler(api.GetACMEConfig))
+	httpRouter.PUT("/certs/letsencrypt/config", httphelper.WrapHandler(api.UpdateACMEConfig))
+	httpRouter.GET("/certs/letsencrypt/:domain", httphelper.WrapHandler(api.GetACMECert))
+	httpRouter.DELETE("/certs/letsencrypt/:domain", httphelper.WrapHandler(api.RevokeACMECert))
+
+	httpRouter.Handler("GET", "/.well-known/acme-challenge/*token", acmeChallengeHandler{c: &api})
+
 	httpRouter.POST("/apps/:apps_id/meta", httphelper.WrapHandler(api.appLookup(api.UpdateApp)))
 
 	httpRouter.GET("/events", httphelper.WrapHandler(api.Events))
@@ -324,7 +342,7 @@ func muxHandler(main http.Handler, grpcSrv *grpc.Server, authorizer *authorizer.
 		}
 
 		_, password, _ := r.BasicAuth()
-		if password == "" && r.URL.Path == "/ca-cert" {
+		if password == "" && (r.URL.Path == "/ca-cert" || strings.HasPrefix(r.URL.Path, "/.well-known/acme-challenge/")) {
 			main.ServeHTTP(w, r)
 			return
 		}
@@ -362,6 +380,13 @@ type controllerAPI struct {
 	caCert              []byte
 	config              handlerConfig
 	authorizer          *authorizer.Authorizer
+
+	acmeStore       autocert.Store
+	acmeMgr         *autocert.Manager
+	acmeMgrConfig   *autocert.Config
+	acmeMtx         sync.RWMutex
+	acmeObtainMtx   sync.Mutex
+	acmeRenewalStop func()
 
 	eventListener    *data.EventListener
 	eventListenerMtx sync.Mutex
@@ -424,6 +449,9 @@ func (c *controllerAPI) GetCACert(_ context.Context, w http.ResponseWriter, _ *h
 }
 
 func (c *controllerAPI) Shutdown() {
+	if c.acmeRenewalStop != nil {
+		c.acmeRenewalStop()
+	}
 	if c.eventListener != nil {
 		c.eventListener.CloseWithError(ErrShutdown)
 	}

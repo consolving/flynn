@@ -53,6 +53,12 @@ type Client interface {
 	CreateRoute(appID string, route *router.Route) error
 	UpdateRoute(appID string, routeID string, route *router.Route) error
 	DeleteRoute(appID string, routeID string) error
+	ProvisionACMECert(req *ct.ACMECertRequest) (*ct.ACMECert, error)
+	ACMECertList() ([]*ct.ACMECert, error)
+	GetACMECert(domain string) (*ct.ACMECert, error)
+	RevokeACMECert(domain string) error
+	GetACMEConfig() (*ct.ACMEConfig, error)
+	UpdateACMEConfig(cfg *ct.ACMEConfig) (*ct.ACMEConfig, error)
 	GetFormation(appID, releaseID string) (*ct.Formation, error)
 	GetExpandedFormation(appID, releaseID string) (*ct.ExpandedFormation, error)
 	FormationList(appID string) ([]*ct.Formation, error)

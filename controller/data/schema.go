@@ -957,6 +957,30 @@ $$ LANGUAGE SQL;
 	migrations.Add(49, `
 ALTER TABLE http_routes ADD COLUMN disable_keep_alives boolean NOT NULL DEFAULT false;
 	`)
+	migrations.Add(50,
+		`CREATE TABLE acme_accounts (
+			id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+			email text UNIQUE NOT NULL,
+			private_key text NOT NULL,
+			registration text,
+			created_at timestamptz NOT NULL DEFAULT now(),
+			updated_at timestamptz NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE acme_certificates (
+			id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+			domain text NOT NULL,
+			domains text[] NOT NULL,
+			cert text NOT NULL,
+			key text NOT NULL,
+			cert_url text NOT NULL DEFAULT '',
+			account_email text NOT NULL,
+			expires_at timestamptz NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT now(),
+			updated_at timestamptz NOT NULL DEFAULT now(),
+			deleted_at timestamptz
+		)`,
+		`CREATE UNIQUE INDEX acme_certificates_domain_key ON acme_certificates (domain) WHERE deleted_at IS NULL`,
+	)
 }
 
 func MigrateDB(db *postgres.DB) error {
