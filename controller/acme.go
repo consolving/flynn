@@ -15,6 +15,25 @@ import (
 	"github.com/flynn/flynn/pkg/httphelper"
 )
 
+// acmeStoreWithRouteSync wraps an autocert.Store and updates any HTTP routes
+// bound to the certificate's ACME domain whenever a certificate is saved.
+type acmeStoreWithRouteSync struct {
+	autocert.Store
+	routes *data.RouteRepo
+}
+
+func (s *acmeStoreWithRouteSync) SaveCertificate(cert *autocert.CertificateData) error {
+	if err := s.Store.SaveCertificate(cert); err != nil {
+		return err
+	}
+	for _, domain := range cert.Domains {
+		if err := s.routes.SyncACMECert(domain, string(cert.CertPEM), string(cert.KeyPEM)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var errACMEUnconfigured = errors.New("controller: Let's Encrypt is not configured")
 
 // autocertConfigFromEnv builds an autocert.Config from environment variables.

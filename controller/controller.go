@@ -185,7 +185,10 @@ func appHandler(c handlerConfig) (http.Handler, *grpc.Server, *controllerAPI) {
 	backupRepo := data.NewBackupRepo(c.db)
 	sinkRepo := data.NewSinkRepo(c.db)
 	volumeRepo := data.NewVolumeRepo(c.db)
-	acmeStore := data.NewACMEStore(c.db)
+	acmeStore := &acmeStoreWithRouteSync{
+		Store:  data.NewACMEStore(c.db),
+		routes: routeRepo,
+	}
 
 	api := controllerAPI{
 		domainMigrationRepo: domainMigrationRepo,
