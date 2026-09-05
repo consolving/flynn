@@ -49,6 +49,11 @@ type Route struct {
 	// Certificate contains TLSCert and TLSKey
 	Certificate *Certificate `json:"certificate,omitempty"`
 
+	// ACMEDomain is the domain of an ACME-managed certificate that should be
+	// attached to this route. When set, the controller keeps the route's
+	// certificate in sync with the ACME certificate on provision and renewal.
+	ACMEDomain string `json:"acme_domain,omitempty"`
+
 	// Deprecated in favor of Certificate
 	LegacyTLSCert string `json:"tls_cert,omitempty"`
 	LegacyTLSKey  string `json:"tls_key,omitempty"`
@@ -89,6 +94,7 @@ func (r Route) HTTPRoute() *HTTPRoute {
 
 		Domain:            r.Domain,
 		Certificate:       r.Certificate,
+		ACMEDomain:        r.ACMEDomain,
 		LegacyTLSCert:     r.LegacyTLSCert,
 		LegacyTLSKey:      r.LegacyTLSKey,
 		Sticky:            r.Sticky,
@@ -123,6 +129,7 @@ type HTTPRoute struct {
 
 	Domain            string
 	Certificate       *Certificate `json:"certificate,omitempty"`
+	ACMEDomain        string       `json:"acme_domain,omitempty"`
 	LegacyTLSCert     string       `json:"tls_cert,omitempty"`
 	LegacyTLSKey      string       `json:"tls_key,omitempty"`
 	Sticky            bool
@@ -154,6 +161,7 @@ func (r HTTPRoute) ToRoute() *Route {
 		// http-specific fields
 		Domain:            r.Domain,
 		Certificate:       r.Certificate,
+		ACMEDomain:        r.ACMEDomain,
 		LegacyTLSCert:     r.LegacyTLSCert,
 		LegacyTLSKey:      r.LegacyTLSKey,
 		Sticky:            r.Sticky,
