@@ -249,9 +249,11 @@ func runRouteUpdateHTTP(args *docopt.Args, client controller.Client) error {
 		if err != nil {
 			return err
 		}
+		route.ACMEDomain = domain
 		route.LegacyTLSCert = cert.Cert
 		route.LegacyTLSKey = cert.Key
 	} else {
+		route.ACMEDomain = ""
 		route.LegacyTLSCert, route.LegacyTLSKey, err = parseTLSCert(args)
 		if err != nil {
 			return err
