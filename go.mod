@@ -1,6 +1,6 @@
 module github.com/flynn/flynn
 
-go 1.25.0
+go 1.23
 
 require (
 	cloud.google.com/go/storage v1.56.0
