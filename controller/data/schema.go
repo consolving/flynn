@@ -981,6 +981,9 @@ ALTER TABLE http_routes ADD COLUMN disable_keep_alives boolean NOT NULL DEFAULT 
 		)`,
 		`CREATE UNIQUE INDEX acme_certificates_domain_key ON acme_certificates (domain) WHERE deleted_at IS NULL`,
 	)
+	migrations.Add(51,
+		`ALTER TABLE http_routes ADD COLUMN acme_domain text`,
+	)
 }
 
 func MigrateDB(db *postgres.DB) error {
