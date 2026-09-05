@@ -102,6 +102,7 @@ var preparedStatements = map[string]string{
 	"http_route_select":                     httpRouteSelectQuery,
 	"http_route_update":                     httpRouteUpdateQuery,
 	"http_route_delete":                     httpRouteDeleteQuery,
+	"http_route_list_by_acme_domain":        httpRouteListByACMEDomainQuery,
 	"tcp_route_list":                        tcpRouteListQuery,
 	"tcp_route_list_by_parent_ref":          tcpRouteListByParentRefQuery,
 	"tcp_route_insert":                      tcpRouteInsertQuery,
@@ -111,6 +112,12 @@ var preparedStatements = map[string]string{
 	"certificate_insert":                    certificateInsertQuery,
 	"route_certificate_delete_by_route_id":  routeCertificateDeleteByRouteIDQuery,
 	"route_certificate_insert":              routeCertificateInsertQuery,
+	"acme_account_insert":                   acmeAccountInsertQuery,
+	"acme_account_select":                   acmeAccountSelectQuery,
+	"acme_certificate_upsert":               acmeCertificateUpsertQuery,
+	"acme_certificate_select":               acmeCertificateSelectQuery,
+	"acme_certificate_select_all":           acmeCertificateSelectAllQuery,
+	"acme_certificate_delete":               acmeCertificateDeleteQuery,
 }
 
 func PrepareStatements(conn *pgx.Conn) error {
@@ -626,31 +633,34 @@ RETURNING created_at, updated_at`
 	volumeDecommissionQuery = `
 UPDATE volumes SET updated_at = now(), decommissioned_at = now() WHERE app_id = $1 AND volume_id = $2 RETURNING updated_at, decommissioned_at`
 	httpRouteListQuery = `
-SELECT r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at, c.id, c.cert, c.key, c.created_at, c.updated_at FROM http_routes as r
+SELECT r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.acme_domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at, c.id, c.cert, c.key, c.created_at, c.updated_at FROM http_routes as r
 LEFT OUTER JOIN route_certificates AS rc on r.id = rc.http_route_id
 LEFT OUTER JOIN certificates AS c ON c.id = rc.certificate_id
 WHERE r.deleted_at IS NULL
 ORDER BY r.domain, r.path`
 	httpRouteListByParentRefQuery = `
-SELECT r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at, c.id, c.cert, c.key, c.created_at, c.updated_at FROM http_routes as r
+SELECT r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.acme_domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at, c.id, c.cert, c.key, c.created_at, c.updated_at FROM http_routes as r
 LEFT OUTER JOIN route_certificates AS rc on r.id = rc.http_route_id
 LEFT OUTER JOIN certificates AS c ON c.id = rc.certificate_id
 WHERE r.parent_ref = $1 AND r.deleted_at IS NULL
 ORDER BY r.domain, r.path`
 	httpRouteInsertQuery = `
-INSERT INTO http_routes (parent_ref, service, port, leader, drain_backends, domain, sticky, path, disable_keep_alives)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO http_routes (parent_ref, service, port, leader, drain_backends, domain, acme_domain, sticky, path, disable_keep_alives)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, path, created_at, updated_at`
 	httpRouteSelectQuery = `
-SELECT r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at, c.id, c.cert, c.key, c.created_at, c.updated_at FROM http_routes as r
+SELECT r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.acme_domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at, c.id, c.cert, c.key, c.created_at, c.updated_at FROM http_routes as r
 LEFT OUTER JOIN route_certificates AS rc on r.id = rc.http_route_id
 LEFT OUTER JOIN certificates AS c ON c.id = rc.certificate_id
 WHERE r.id = $1 AND r.deleted_at IS NULL`
 	httpRouteUpdateQuery = `
 UPDATE http_routes as r
-SET parent_ref = $1, service = $2, port = $3, leader = $4, sticky = $5, path = $6, disable_keep_alives = $7
-WHERE id = $8 AND domain = $9 AND deleted_at IS NULL
-RETURNING r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at`
+SET parent_ref = $1, service = $2, port = $3, leader = $4, sticky = $5, path = $6, disable_keep_alives = $7, acme_domain = $8
+WHERE id = $9 AND domain = $10 AND deleted_at IS NULL
+RETURNING r.id, r.parent_ref, r.service, r.port, r.leader, r.drain_backends, r.domain, r.acme_domain, r.sticky, r.path, r.disable_keep_alives, r.created_at, r.updated_at`
+	httpRouteListByACMEDomainQuery = `
+SELECT id FROM http_routes
+WHERE acme_domain = $1 AND deleted_at IS NULL`
 	httpRouteDeleteQuery = `
 UPDATE http_routes SET deleted_at = now()
 WHERE id = $1`
@@ -685,4 +695,38 @@ WHERE http_route_id = $1`
 	routeCertificateInsertQuery = `
 INSERT INTO route_certificates (http_route_id, certificate_id)
 VALUES ($1, $2)`
+	acmeAccountInsertQuery = `
+INSERT INTO acme_accounts (email, private_key, registration)
+VALUES ($1, $2, $3)
+ON CONFLICT (email) DO UPDATE SET private_key = EXCLUDED.private_key, registration = EXCLUDED.registration, updated_at = now()
+RETURNING id, email, created_at, updated_at`
+	acmeAccountSelectQuery = `
+SELECT id, email, private_key, registration, created_at, updated_at
+FROM acme_accounts
+ORDER BY created_at ASC
+LIMIT 1`
+	acmeCertificateUpsertQuery = `
+INSERT INTO acme_certificates (domain, domains, cert, key, cert_url, account_email, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (domain) WHERE deleted_at IS NULL DO UPDATE SET
+	domains = EXCLUDED.domains,
+	cert = EXCLUDED.cert,
+	key = EXCLUDED.key,
+	cert_url = EXCLUDED.cert_url,
+	account_email = EXCLUDED.account_email,
+	expires_at = EXCLUDED.expires_at,
+	updated_at = now()
+RETURNING id, created_at, updated_at`
+	acmeCertificateSelectQuery = `
+SELECT id, domain, domains, cert, key, cert_url, account_email, expires_at, created_at, updated_at
+FROM acme_certificates
+WHERE domain = $1 AND deleted_at IS NULL`
+	acmeCertificateSelectAllQuery = `
+SELECT id, domain, domains, cert, key, cert_url, account_email, expires_at, created_at, updated_at
+FROM acme_certificates
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC`
+	acmeCertificateDeleteQuery = `
+UPDATE acme_certificates SET deleted_at = now()
+WHERE domain = $1 AND deleted_at IS NULL`
 )

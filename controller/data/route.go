@@ -69,6 +69,7 @@ func (r *RouteRepo) addHTTP(tx *postgres.DBTx, route *router.Route) error {
 	if route.Port > 0 {
 		return ErrRouteInvalid
 	}
+	route.ACMEDomain = normalizeDomain(route.ACMEDomain)
 	if err := tx.QueryRow(
 		"http_route_insert",
 		route.ParentRef,
@@ -77,6 +78,7 @@ func (r *RouteRepo) addHTTP(tx *postgres.DBTx, route *router.Route) error {
 		route.Leader,
 		route.DrainBackends,
 		route.Domain,
+		route.ACMEDomain,
 		route.Sticky,
 		route.Path,
 		route.DisableKeepAlives,
@@ -202,6 +204,7 @@ func scanHTTPRoute(s postgres.Scanner) (*router.Route, error) {
 		&route.Leader,
 		&route.DrainBackends,
 		&route.Domain,
+		&route.ACMEDomain,
 		&route.Sticky,
 		&route.Path,
 		&route.DisableKeepAlives,
@@ -341,6 +344,7 @@ func (r *RouteRepo) Update(route *router.Route) error {
 }
 
 func (r *RouteRepo) updateHTTP(tx *postgres.DBTx, route *router.Route) error {
+	route.ACMEDomain = normalizeDomain(route.ACMEDomain)
 	if err := tx.QueryRow(
 		"http_route_update",
 		route.ParentRef,
@@ -350,6 +354,7 @@ func (r *RouteRepo) updateHTTP(tx *postgres.DBTx, route *router.Route) error {
 		route.Sticky,
 		route.Path,
 		route.DisableKeepAlives,
+		route.ACMEDomain,
 		route.ID,
 		route.Domain,
 	).Scan(
@@ -360,6 +365,7 @@ func (r *RouteRepo) updateHTTP(tx *postgres.DBTx, route *router.Route) error {
 		&route.Leader,
 		&route.DrainBackends,
 		&route.Domain,
+		&route.ACMEDomain,
 		&route.Sticky,
 		&route.Path,
 		&route.DisableKeepAlives,
@@ -412,6 +418,58 @@ func (r *RouteRepo) Delete(route *router.Route) error {
 		return err
 	}
 	if err := r.createEvent(tx, route, ct.EventTypeRouteDeletion); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// SyncACMECert updates the certificates of all non-deleted HTTP routes bound
+// to the given ACME domain. It is called when an ACME certificate is
+// provisioned or renewed so that the router serves the new certificate
+// without requiring a manual route update.
+func (r *RouteRepo) SyncACMECert(domain, certPEM, keyPEM string) error {
+	rows, err := r.db.Query("http_route_list_by_acme_domain", normalizeDomain(domain))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var routeIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		routeIDs = append(routeIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, id := range routeIDs {
+		if err := r.syncRouteCert(id, certPEM, keyPEM); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *RouteRepo) syncRouteCert(id, certPEM, keyPEM string) error {
+	route, err := r.getHTTP(id)
+	if err != nil {
+		return err
+	}
+	route.Certificate = &router.Certificate{Cert: certPEM, Key: keyPEM}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := r.addRouteCertWithTx(tx, route); err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := r.createEvent(tx, route, ct.EventTypeRoute); err != nil {
 		tx.Rollback()
 		return err
 	}

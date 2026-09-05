@@ -450,6 +450,42 @@ func (c *Client) DeleteRoute(appID string, routeID string) error {
 	return c.Delete(fmt.Sprintf("/apps/%s/routes/%s", appID, routeID), nil)
 }
 
+// ProvisionACMECert provisions a Let's Encrypt certificate for the given
+// domains.
+func (c *Client) ProvisionACMECert(req *ct.ACMECertRequest) (*ct.ACMECert, error) {
+	cert := &ct.ACMECert{}
+	return cert, c.Post("/certs/letsencrypt", req, cert)
+}
+
+// ACMECertList returns all certificates managed via Let's Encrypt.
+func (c *Client) ACMECertList() ([]*ct.ACMECert, error) {
+	var certs []*ct.ACMECert
+	return certs, c.Get("/certs/letsencrypt", &certs)
+}
+
+// GetACMECert returns the certificate for a domain.
+func (c *Client) GetACMECert(domain string) (*ct.ACMECert, error) {
+	cert := &ct.ACMECert{}
+	return cert, c.Get(fmt.Sprintf("/certs/letsencrypt/%s", url.PathEscape(domain)), cert)
+}
+
+// RevokeACMECert revokes the certificate for a domain.
+func (c *Client) RevokeACMECert(domain string) error {
+	return c.Delete(fmt.Sprintf("/certs/letsencrypt/%s", url.PathEscape(domain)), nil)
+}
+
+// GetACMEConfig returns the controller's ACME configuration.
+func (c *Client) GetACMEConfig() (*ct.ACMEConfig, error) {
+	cfg := &ct.ACMEConfig{}
+	return cfg, c.Get("/certs/letsencrypt/config", cfg)
+}
+
+// UpdateACMEConfig updates the controller's ACME configuration.
+func (c *Client) UpdateACMEConfig(cfg *ct.ACMEConfig) (*ct.ACMEConfig, error) {
+	out := &ct.ACMEConfig{}
+	return out, c.Put("/certs/letsencrypt/config", cfg, out)
+}
+
 // GetFormation returns details for the specified formation under app and
 // release.
 func (c *Client) GetFormation(appID, releaseID string) (*ct.Formation, error) {

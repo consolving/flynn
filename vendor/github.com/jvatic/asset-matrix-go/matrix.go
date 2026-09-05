@@ -207,7 +207,7 @@ func (m *Matrix) installDeps() error {
 	return installNpmPackages([]string{
 		"recast@0.10.30",
 		"es6-promise@3.0.2",
-		"sass@1.77.0",
+		"node-sass@4.12.0",
 		"babel-cli@6.11.4",
 		"babel-plugin-transform-react-jsx@6.8",
 		"eslint@1.6.0",

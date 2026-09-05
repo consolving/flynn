@@ -42,6 +42,10 @@
     "certificate": {
       "$ref": "/schema/router/certificate#"
     },
+    "acme_domain": {
+      "type": "string",
+      "description": "Domain of an ACME-managed certificate to attach to this HTTP route. The controller keeps the route certificate in sync on provision and renewal."
+    },
     "path": {
       "type": "string",
       "description": "Optional path to route to this service, HTTP routes only and exclusive with TLS options."

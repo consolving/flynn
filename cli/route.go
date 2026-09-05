@@ -21,7 +21,7 @@ func init() {
 usage: flynn route
        flynn route add http [-s <service>] [-p <port>] [-c <tls-cert> -k <tls-key>] [--sticky] [--leader] [--no-leader] [--no-drain-backends] [--disable-keep-alives] <domain>
        flynn route add tcp [-s <service>] [-p <port>] [--leader] [--no-drain-backends]
-       flynn route update <id> [-s <service>] [-c <tls-cert> -k <tls-key>] [--sticky] [--no-sticky] [--leader] [--no-leader] [--disable-keep-alives] [--enable-keep-alives]
+       flynn route update <id> [-s <service>] [-c <tls-cert> -k <tls-key>] [--acme <domain>] [--sticky] [--no-sticky] [--leader] [--no-leader] [--disable-keep-alives] [--enable-keep-alives]
        flynn route remove <id>
 
 Manage routes for application.
@@ -30,6 +30,7 @@ Options:
 	-s, --service=<service>    service name to route domain to (defaults to APPNAME-web)
 	-c, --tls-cert=<tls-cert>  path to PEM encoded certificate for TLS, - for stdin (http only)
 	-k, --tls-key=<tls-key>    path to PEM encoded private key for TLS, - for stdin (http only)
+	--acme=<domain>            domain of an ACME-issued certificate to attach to the route (update http only; replaces -c/-k)
 	--sticky                   enable cookie-based sticky routing (http only)
 	--no-sticky                disable cookie-based sticky routing (update http only)
 	--leader                   enable leader-only routing mode
@@ -224,6 +225,12 @@ func runRouteUpdateTCP(args *docopt.Args, client controller.Client) error {
 }
 
 func runRouteUpdateHTTP(args *docopt.Args, client controller.Client) error {
+	if domain := args.String["--acme"]; domain != "" {
+		if args.String["--tls-cert"] != "" || args.String["--tls-key"] != "" {
+			return errors.New("--acme cannot be combined with -c/--tls-cert or -k/--tls-key")
+		}
+	}
+
 	id := args.String["<id>"]
 	appName := mustApp()
 
@@ -237,9 +244,20 @@ func runRouteUpdateHTTP(args *docopt.Args, client controller.Client) error {
 	}
 
 	route.Certificate = nil
-	route.LegacyTLSCert, route.LegacyTLSKey, err = parseTLSCert(args)
-	if err != nil {
-		return err
+	if domain := args.String["--acme"]; domain != "" {
+		cert, err := client.GetACMECert(domain)
+		if err != nil {
+			return err
+		}
+		route.ACMEDomain = domain
+		route.LegacyTLSCert = cert.Cert
+		route.LegacyTLSKey = cert.Key
+	} else {
+		route.ACMEDomain = ""
+		route.LegacyTLSCert, route.LegacyTLSKey, err = parseTLSCert(args)
+		if err != nil {
+			return err
+		}
 	}
 
 	if args.Bool["--sticky"] {
