@@ -262,8 +262,11 @@ func (f *fileSystemStore) Commit(meta map[string]json.RawMessage, consistentSnap
 		if consistentSnapshot {
 			// strip out the hash
 			name := strings.SplitN(filepath.Base(path), ".", 2)
-			if name[1] == "" {
-				return false
+			if len(name) < 2 || name[1] == "" {
+				// No hash prefix (e.g. a target with no extension like
+				// channels/stable); compare against the path as-is.
+				_, ok := hashes[path]
+				return !ok
 			}
 			path = filepath.Join(filepath.Dir(path), name[1])
 		}
