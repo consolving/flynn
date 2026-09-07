@@ -466,12 +466,12 @@ func (c *Client) ACMECertList() ([]*ct.ACMECert, error) {
 // GetACMECert returns the certificate for a domain.
 func (c *Client) GetACMECert(domain string) (*ct.ACMECert, error) {
 	cert := &ct.ACMECert{}
-	return cert, c.Get(fmt.Sprintf("/certs/letsencrypt/%s", url.PathEscape(domain)), cert)
+	return cert, c.Get(fmt.Sprintf("/certs/letsencrypt/domains/%s", url.PathEscape(domain)), cert)
 }
 
 // RevokeACMECert revokes the certificate for a domain.
 func (c *Client) RevokeACMECert(domain string) error {
-	return c.Delete(fmt.Sprintf("/certs/letsencrypt/%s", url.PathEscape(domain)), nil)
+	return c.Delete(fmt.Sprintf("/certs/letsencrypt/domains/%s", url.PathEscape(domain)), nil)
 }
 
 // GetACMEConfig returns the controller's ACME configuration.

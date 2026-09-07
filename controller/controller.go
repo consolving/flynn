@@ -292,8 +292,8 @@ func appHandler(c handlerConfig) (http.Handler, *grpc.Server, *controllerAPI) {
 	httpRouter.GET("/certs/letsencrypt", httphelper.WrapHandler(api.ListACMECerts))
 	httpRouter.GET("/certs/letsencrypt/config", httphelper.WrapHandler(api.GetACMEConfig))
 	httpRouter.PUT("/certs/letsencrypt/config", httphelper.WrapHandler(api.UpdateACMEConfig))
-	httpRouter.GET("/certs/letsencrypt/:domain", httphelper.WrapHandler(api.GetACMECert))
-	httpRouter.DELETE("/certs/letsencrypt/:domain", httphelper.WrapHandler(api.RevokeACMECert))
+	httpRouter.GET("/certs/letsencrypt/domains/:domain", httphelper.WrapHandler(api.GetACMECert))
+	httpRouter.DELETE("/certs/letsencrypt/domains/:domain", httphelper.WrapHandler(api.RevokeACMECert))
 
 	httpRouter.Handler("GET", "/.well-known/acme-challenge/*token", acmeChallengeHandler{c: &api})
 

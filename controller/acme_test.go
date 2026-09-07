@@ -45,7 +45,7 @@ func TestACMEProvisionUnconfigured(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	api.RevokeACMECert(context.Background(), rec, httptest.NewRequest("DELETE", "/certs/letsencrypt/nonexistent.com", nil))
+	api.RevokeACMECert(context.Background(), rec, httptest.NewRequest("DELETE", "/certs/letsencrypt/domains/nonexistent.com", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for missing cert, got %d", rec.Code)
 	}
@@ -55,7 +55,7 @@ func TestACMECertNotFound(t *testing.T) {
 	api := newTestACMEAPI(t)
 	ctx := ctxhelper.NewContextParams(context.Background(), httprouter.Params{{Key: "domain", Value: "example.com"}})
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/certs/letsencrypt/example.com", nil)
+	req := httptest.NewRequest("GET", "/certs/letsencrypt/domains/example.com", nil)
 	api.GetACMECert(ctx, rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for missing certificate, got %d", rec.Code)
