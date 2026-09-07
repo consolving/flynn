@@ -469,6 +469,12 @@ func (r *RouteRepo) syncRouteCert(id, certPEM, keyPEM string) error {
 		tx.Rollback()
 		return err
 	}
+	// The route row itself is unchanged by addRouteCertWithTx, so refresh
+	// UpdatedAt to make the event's deduplication hash distinct from any
+	// previous route event (e.g. the route update that bound the ACME
+	// domain) and ensure the router is notified of the new certificate.
+	route.UpdatedAt = time.Now()
+
 	if err := r.createEvent(tx, route, ct.EventTypeRoute); err != nil {
 		tx.Rollback()
 		return err

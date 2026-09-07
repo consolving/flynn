@@ -1,14 +1,17 @@
 package data
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/flynn/flynn/pkg/autocert"
+	"github.com/flynn/flynn/pkg/postgres"
 	"github.com/flynn/flynn/pkg/random"
 	"github.com/flynn/flynn/router/testutils"
 	. "github.com/flynn/go-check"
+	"github.com/jackc/pgx"
 )
 
 func TestACMEStore(t *testing.T) { TestingT(t) }
@@ -17,10 +20,27 @@ type ACMEStoreSuite struct{}
 
 var _ = Suite(&ACMEStoreSuite{})
 
-func (ACMEStoreSuite) TestAccountCRUD(c *C) {
-	db := setupTestDB(c, "controllertest_acme_store_account")
+// setupACMETestDB creates a fresh database, migrates it to the latest schema
+// and reconnects with prepared statements, since the store and route repos
+// use named queries.
+func setupACMETestDB(c *C, dbname string) *postgres.DB {
+	db := setupTestDB(c, dbname)
 	m := &testMigrator{c: c, db: db}
-	m.migrateTo(50)
+	m.migrateTo(51)
+
+	pgxpool, err := pgx.NewConnPool(pgx.ConnPoolConfig{
+		ConnConfig: pgx.ConnConfig{
+			Host:     os.Getenv("PGHOST"),
+			Database: dbname,
+		},
+		AfterConnect: PrepareStatements,
+	})
+	c.Assert(err, IsNil)
+	return postgres.New(pgxpool, nil)
+}
+
+func (ACMEStoreSuite) TestAccountCRUD(c *C) {
+	db := setupACMETestDB(c, "controllertest_acme_store_account")
 
 	store := NewACMEStore(db)
 
@@ -52,9 +72,7 @@ func (ACMEStoreSuite) TestAccountCRUD(c *C) {
 }
 
 func (ACMEStoreSuite) TestCertificateCRUD(c *C) {
-	db := setupTestDB(c, "controllertest_acme_store_cert")
-	m := &testMigrator{c: c, db: db}
-	m.migrateTo(50)
+	db := setupACMETestDB(c, "controllertest_acme_store_cert")
 
 	store := NewACMEStore(db)
 
@@ -114,14 +132,12 @@ func (ACMEStoreSuite) TestCertificateCRUD(c *C) {
 }
 
 func (ACMEStoreSuite) TestCertificateDomainUniqueness(c *C) {
-	db := setupTestDB(c, "controllertest_acme_store_unique")
-	m := &testMigrator{c: c, db: db}
-	m.migrateTo(50)
+	db := setupACMETestDB(c, "controllertest_acme_store_unique")
 
 	store := NewACMEStore(db)
 
 	cert1 := testACMECert(c, "shared.example.com")
-	cert1.ExpiresAt = time.Now().Add(30 * 24 * time.Hour)
+	cert1.ExpiresAt = time.Now().Add(30 * 24 * time.Hour).Truncate(time.Microsecond)
 	c.Assert(store.SaveCertificate(cert1), IsNil)
 
 	// Deleting then re-adding the same domain should succeed (partial unique
@@ -129,7 +145,7 @@ func (ACMEStoreSuite) TestCertificateDomainUniqueness(c *C) {
 	c.Assert(store.DeleteCertificate("shared.example.com"), IsNil)
 
 	cert2 := testACMECert(c, "shared.example.com")
-	cert2.ExpiresAt = time.Now().Add(60 * 24 * time.Hour)
+	cert2.ExpiresAt = time.Now().Add(60 * 24 * time.Hour).Truncate(time.Microsecond)
 	c.Assert(store.SaveCertificate(cert2), IsNil)
 
 	loaded, err := store.LoadCertificate("shared.example.com")
@@ -138,9 +154,7 @@ func (ACMEStoreSuite) TestCertificateDomainUniqueness(c *C) {
 }
 
 func (ACMEStoreSuite) TestACMECertSyncsBoundRoutes(c *C) {
-	db := setupTestDB(c, "controllertest_acme_store_sync")
-	m := &testMigrator{c: c, db: db}
-	m.migrateTo(51)
+	db := setupACMETestDB(c, "controllertest_acme_store_sync")
 
 	appID := random.UUID()
 	c.Assert(db.Exec(`INSERT INTO apps (app_id, name) VALUES ($1, $2)`, appID, "acme-sync-app"), IsNil)
@@ -191,6 +205,8 @@ func testACMECert(c *C, domain string) *autocert.CertificateData {
 		Domains:      []string{domain},
 		AccountEmail: "acme@example.com",
 		CertURL:      "https://acme.example.com/cert/" + random.String(8),
-		ExpiresAt:    time.Now().Add(90 * 24 * time.Hour),
+		// PostgreSQL timestamptz has microsecond precision; truncate so the
+		// value survives the round trip for equality assertions.
+		ExpiresAt: time.Now().Add(90 * 24 * time.Hour).Truncate(time.Microsecond),
 	}
 }
