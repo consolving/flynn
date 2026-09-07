@@ -845,7 +845,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 			ExtraFiles: map[string]string{
 				"controller/start.sh":        "/bin/start-flynn-controller",
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 				"schema/common.json":         "/etc/flynn-controller/jsonschema/common.json",
 				"schema/error.json":          "/etc/flynn-controller/jsonschema/error.json",
 			},
@@ -864,7 +864,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"flynn-router": "/bin/flynn-router",
 			},
 			ExtraFiles: map[string]string{
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-router"},
@@ -919,7 +919,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"flynn-blobstore": "/bin/flynn-blobstore",
 			},
 			ExtraFiles: map[string]string{
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-blobstore", "server"},
@@ -933,7 +933,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"flynn-init": "/usr/local/bin/flynn-init",
 			},
 			ExtraFiles: map[string]string{
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 				"host/zfs-mknod.sh":          "/usr/local/bin/zfs-mknod",
 				"host/udev.rules":            "/lib/udev/rules.d/10-local.rules",
 				"host/start.sh":              "/usr/local/bin/start-flynn-host.sh",
