@@ -896,6 +896,13 @@ func (e *exporter) imageSpecs() []imageSpec {
 			Binaries: map[string]string{
 				"flynn-dashboard": "/bin/flynn-dashboard",
 			},
+			// The dashboard binary reads its compiled web assets from disk
+			// relative to its working directory (/), see dashboard/bindata.go.
+			// Without these the web process panics at startup with
+			// "open app/build/assets/manifest.json: no such file or directory".
+			ExtraDirs: map[string]string{
+				"dashboard/app/build": "/app/build",
+			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-dashboard"},
 			},
