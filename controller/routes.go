@@ -7,11 +7,18 @@ import (
 
 	"github.com/flynn/flynn/controller/data"
 	"github.com/flynn/flynn/controller/schema"
+	"github.com/flynn/flynn/controller/utils"
 	"github.com/flynn/flynn/pkg/ctxhelper"
 	"github.com/flynn/flynn/pkg/httphelper"
 	router "github.com/flynn/flynn/router/types"
 	"context"
 )
+
+// RouteWithCert wraps a route with parsed certificate details
+type RouteWithCert struct {
+	*router.Route
+	CertificateDetails *utils.CertificateDetails `json:"certificate_details,omitempty"`
+}
 
 func (c *controllerAPI) CreateRoute(ctx context.Context, w http.ResponseWriter, req *http.Request) {
 	var route router.Route
@@ -68,7 +75,12 @@ func (c *controllerAPI) GetRoute(ctx context.Context, w http.ResponseWriter, req
 		return
 	}
 
-	httphelper.JSON(w, 200, route)
+	routeWithCert := &RouteWithCert{
+		Route:              route,
+		CertificateDetails: utils.ParseCertificateDetailsFromRoute(route),
+	}
+
+	httphelper.JSON(w, 200, routeWithCert)
 }
 
 type sortedRoutes []*router.Route
@@ -84,7 +96,15 @@ func (c *controllerAPI) GetRouteList(ctx context.Context, w http.ResponseWriter,
 		return
 	}
 	sort.Sort(sortedRoutes(routes))
-	httphelper.JSON(w, 200, routes)
+
+	routesWithCert := make([]*RouteWithCert, len(routes))
+	for i, route := range routes {
+		routesWithCert[i] = &RouteWithCert{
+			Route:              route,
+			CertificateDetails: utils.ParseCertificateDetailsFromRoute(route),
+		}
+	}
+	httphelper.JSON(w, 200, routesWithCert)
 }
 
 func (c *controllerAPI) GetAppRouteList(ctx context.Context, w http.ResponseWriter, req *http.Request) {
@@ -94,7 +114,15 @@ func (c *controllerAPI) GetAppRouteList(ctx context.Context, w http.ResponseWrit
 		return
 	}
 	sort.Sort(sortedRoutes(routes))
-	httphelper.JSON(w, 200, routes)
+
+	routesWithCert := make([]*RouteWithCert, len(routes))
+	for i, route := range routes {
+		routesWithCert[i] = &RouteWithCert{
+			Route:              route,
+			CertificateDetails: utils.ParseCertificateDetailsFromRoute(route),
+		}
+	}
+	httphelper.JSON(w, 200, routesWithCert)
 }
 
 func (c *controllerAPI) UpdateRoute(ctx context.Context, w http.ResponseWriter, req *http.Request) {

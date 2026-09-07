@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"github.com/flynn/flynn/pkg/attempt"
 	"github.com/flynn/flynn/pkg/cluster"
 	"github.com/flynn/flynn/pkg/stream"
+	router "github.com/flynn/flynn/router/types"
 )
 
 func JobConfig(f *ct.ExpandedFormation, name, hostID string, uuid string) *host.Job {
@@ -345,4 +348,52 @@ func FormationTagsEqual(a, b map[string]map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// CertificateDetails contains parsed certificate information
+type CertificateDetails struct {
+	Subject      string    `json:"subject"`
+	Issuer       string    `json:"issuer"`
+	NotBefore    time.Time `json:"not_before"`
+	NotAfter     time.Time `json:"not_after"`
+	SerialNumber string    `json:"serial_number"`
+	DNSNames     []string  `json:"dns_names"`
+}
+
+// ParseCertificateDetails parses a PEM-encoded certificate and returns its details
+func ParseCertificateDetails(certPEM string) (*CertificateDetails, error) {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	var dnsNames []string
+	if len(cert.DNSNames) > 0 {
+		dnsNames = cert.DNSNames
+	} else if cert.Subject.CommonName != "" {
+		dnsNames = []string{cert.Subject.CommonName}
+	}
+
+	return &CertificateDetails{
+		Subject:      cert.Subject.String(),
+		Issuer:       cert.Issuer.String(),
+		NotBefore:    cert.NotBefore,
+		NotAfter:     cert.NotAfter,
+		SerialNumber: cert.SerialNumber.String(),
+		DNSNames:     dnsNames,
+	}, nil
+}
+
+// ParseCertificateDetailsFromRoute parses the certificate from a route if present
+func ParseCertificateDetailsFromRoute(route *router.Route) *CertificateDetails {
+	if route.Certificate != nil && route.Certificate.Cert != "" {
+		details, _ := ParseCertificateDetails(route.Certificate.Cert)
+		return details
+	}
+	return nil
 }
