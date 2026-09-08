@@ -44,7 +44,8 @@ type imageSpec struct {
 	ExtraFiles    map[string]string // source file (relative to source-dir) -> dest path
 	ExtraDirs     map[string]string // source dir (relative to source-dir) -> dest path
 	Entrypoint    *ct.ImageEntrypoint
-	PackageScript string // path relative to source-dir for package install script (run in chroot on base layer)
+	PackageScript string            // path relative to source-dir for package install script (run in chroot on base layer)
+	PackageFiles  map[string]string // extra source files staged into the chroot (relative to source-dir -> chroot path)
 }
 
 func main() {
@@ -720,6 +721,18 @@ func (e *exporter) buildPackageLayer(spec imageSpec) (*ct.ImageLayer, error) {
 		return nil, fmt.Errorf("copying package script: %s", err)
 	}
 
+	// Stage any extra source files the package script needs
+	for srcRel, dstRel := range spec.PackageFiles {
+		src := filepath.Join(e.sourceDir, srcRel)
+		dst := filepath.Join(mergedDir, dstRel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return nil, fmt.Errorf("staging package file %s: %s", srcRel, err)
+		}
+		if err := copyFile(src, dst, 0755); err != nil {
+			return nil, fmt.Errorf("copying package file %s: %s", srcRel, err)
+		}
+	}
+
 	// Run the package script in chroot
 	cmd = exec.Command("chroot", mergedDir, "/bin/bash", "/tmp/packages.sh")
 	cmd.Stdout = os.Stdout
@@ -1063,6 +1076,13 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"slugbuilder/builder/build.sh":       "/builder/build.sh",
 				"slugbuilder/builder/create-user.sh": "/builder/create-user.sh",
 			},
+			// Install the build-time tools (git, daemontools, pigz, jq, curl)
+			// and the pinned Heroku buildpacks into the package layer.
+			PackageScript: "slugbuilder/img/packages.sh",
+			PackageFiles: map[string]string{
+				"slugbuilder/builder/buildpacks.txt":    "/tmp/buildpacks.txt",
+				"slugbuilder/builder/install-buildpack": "/tmp/install-buildpack",
+			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/builder/build.sh"},
 			},
@@ -1078,6 +1098,11 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"slugbuilder/convert-legacy-slug.sh": "/bin/convert-legacy-slug.sh",
 				"slugbuilder/builder/build.sh":       "/builder/build.sh",
 				"slugbuilder/builder/create-user.sh": "/builder/create-user.sh",
+			},
+			PackageScript: "slugbuilder/img/packages.sh",
+			PackageFiles: map[string]string{
+				"slugbuilder/builder/buildpacks.txt":    "/tmp/buildpacks.txt",
+				"slugbuilder/builder/install-buildpack": "/tmp/install-buildpack",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/builder/build.sh"},
