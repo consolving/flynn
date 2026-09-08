@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/flynn/flynn/pkg/cors"
@@ -77,7 +78,9 @@ func APIHandler(conf *Config) http.Handler {
 type API struct {
 	conf               *Config
 	dashboardJS        bytes.Buffer
+	dashboardJSBody    []byte
 	dashboardJSModTime time.Time
+	dashboardJSMtx     sync.Mutex
 }
 
 const ctxSessionKey = "session"
@@ -117,6 +120,31 @@ func (api *API) UnsetAuthenticated(ctx context.Context, w http.ResponseWriter, r
 	s.Save(req, w)
 }
 
+// requestScheme returns the scheme of the incoming request, honoring the
+// X-Forwarded-Proto header set by the flynn-router (the TLS terminator).
+func requestScheme(req *http.Request) string {
+	if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
+		parts := strings.Split(proto, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
+	}
+	if req.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+// originForRequest derives the public origin (scheme://host) the dashboard is
+// being served under for this request. When InterfaceURLDynamic is enabled it
+// is derived from the request Host so the frontend talks to the dashboard API
+// on the same origin it was loaded from (no cross-origin/CORS issues when the
+// dashboard is reachable under more than one domain, e.g. an extra ACME route).
+func (api *API) originForRequest(req *http.Request) string {
+	if api.conf.InterfaceURLDynamic && req.Host != "" {
+		return requestScheme(req) + "://" + req.Host
+	}
+	return api.conf.InterfaceURL
+}
+
 func (api *API) CorsHandler(main http.Handler) http.Handler {
 	httpInterfaceURL := api.conf.InterfaceURL
 	if strings.HasPrefix(api.conf.InterfaceURL, "https") {
@@ -125,7 +153,13 @@ func (api *API) CorsHandler(main http.Handler) http.Handler {
 	allowedOrigins := []string{api.conf.InterfaceURL, httpInterfaceURL}
 	return (&cors.Options{
 		ShouldAllowOrigin: func(origin string, req *http.Request) bool {
-			for _, o := range allowedOrigins {
+			allowed := allowedOrigins
+			// When serving under a dynamic URL, also allow the origin this
+			// request is being served on.
+			if api.conf.InterfaceURLDynamic {
+				allowed = append(append([]string{}, allowedOrigins...), api.originForRequest(req))
+			}
+			for _, o := range allowed {
 				if origin == o {
 					return true
 				}
@@ -151,7 +185,14 @@ func (api *API) CorsHandler(main http.Handler) http.Handler {
 
 func (api *API) ContentSecurityHandler(main http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Add("Content-Security-Policy", fmt.Sprintf("default-src 'none'; connect-src 'self' %s %s api.github.com; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' *.githubusercontent.com", api.conf.ControllerDomain, api.conf.StatusDomain))
+		connectSrc := fmt.Sprintf("'self' %s %s api.github.com", api.conf.ControllerDomain, api.conf.StatusDomain)
+		if api.conf.InterfaceURLDynamic {
+			// Also allow connections to the origin the dashboard is being served
+			// on so the SPA can reach its own /config and session endpoints when
+			// accessed via an alternate (e.g. ACME) domain.
+			connectSrc += " " + api.originForRequest(req)
+		}
+		w.Header().Add("Content-Security-Policy", fmt.Sprintf("default-src 'none'; connect-src %s; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' *.githubusercontent.com", connectSrc))
 		w.Header().Add("X-Content-Type-Options", "nosniff")
 		w.Header().Add("X-Frame-Options", "DENY")
 		w.Header().Add("X-XSS-Protection", "1; mode=block")
@@ -296,17 +337,44 @@ type DashboardConfig struct {
 	DefaultDeployTimeout int    `json:"DEFAULT_DEPLOY_TIMEOUT"`
 }
 
+// ServeDashboardJs serves the dashboard's main JS bundle. The
+// window.DashboardConfig bootstrap block is prepended per request so that the
+// API_SERVER matches the origin the dashboard is being served under when
+// InterfaceURLDynamic is enabled (so the SPA loads /config from the same
+// origin, avoiding cross-origin/CORS issues on alternate domains).
 func (api *API) ServeDashboardJs(ctx context.Context, w http.ResponseWriter, req *http.Request) {
-	if !api.conf.Cache {
+	if !api.conf.Cache || api.dashboardJS.Len() == 0 {
 		if err := api.cacheDashboardJS(); err != nil {
 			panic(err)
 		}
 	}
-	r := bytes.NewReader(api.dashboardJS.Bytes())
-	http.ServeContent(w, req, req.URL.Path, api.dashboardJSModTime, r)
+	api.dashboardJSMtx.Lock()
+	defer api.dashboardJSMtx.Unlock()
+
+	// Rebuild only the small bootstrap block; the (large) JS body is cached.
+	api.dashboardJS.Truncate(0)
+	data := &api.dashboardJS
+	data.Write([]byte("window.DashboardConfig = "))
+	json.NewEncoder(data).Encode(DashboardConfig{
+		AppName:              api.conf.AppName,
+		ApiServer:            api.originForRequest(req),
+		PathPrefix:           api.conf.PathPrefix,
+		InstallCert:          api.conf.InstallCert,
+		DefaultDeployTimeout: api.conf.DefaultDeployTimeout,
+	})
+	data.Write([]byte(";\n"))
+	data.Write(api.dashboardJSBody)
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Write(api.dashboardJS.Bytes())
 }
 
 func (api *API) cacheDashboardJS() error {
+	api.dashboardJSMtx.Lock()
+	defer api.dashboardJSMtx.Unlock()
+	if len(api.dashboardJSBody) > 0 {
+		return nil
+	}
 	var manifest assetmatrix.Manifest
 	manifestBytes, err := Asset(filepath.Join("app", "build", "assets", "manifest.json"))
 	if err != nil {
@@ -316,25 +384,15 @@ func (api *API) cacheDashboardJS() error {
 		return err
 	}
 
-	var data bytes.Buffer
 	path := filepath.Join("app", "build", "assets", manifest.Assets["dashboard.js"])
 	js, t, err := AssetReader(path)
 	if err != nil {
 		return err
 	}
-
-	data.Write([]byte("window.DashboardConfig = "))
-	json.NewEncoder(&data).Encode(DashboardConfig{
-		AppName:              api.conf.AppName,
-		ApiServer:            api.conf.URL,
-		PathPrefix:           api.conf.PathPrefix,
-		InstallCert:          api.conf.InstallCert,
-		DefaultDeployTimeout: api.conf.DefaultDeployTimeout,
-	})
-	data.Write([]byte(";\n"))
-	io.Copy(&data, js)
-
-	api.dashboardJS = data
+	api.dashboardJSBody, err = io.ReadAll(js)
+	if err != nil {
+		return err
+	}
 	api.dashboardJSModTime = t
 	return nil
 }
