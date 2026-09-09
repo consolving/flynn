@@ -177,6 +177,18 @@ var Client = createClass({
 		});
 	},
 
+	provisionACMECert: function (domains) {
+		return this.performControllerRequest('POST', {
+			url: "/certs/letsencrypt",
+			body: {
+				domains: domains
+			},
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+	},
+
 	createAppRoute: function (appId, data) {
 		return this.performControllerRequest('POST', {
 			url: "/apps/"+ encodeURIComponent(appId) +"/routes",
