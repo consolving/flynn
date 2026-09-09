@@ -1,7 +1,7 @@
 # CI workflow for Flynn
 #
 # Builds all components and runs unit tests on every push and pull request
-# to the tuf-rebuild branch. Uses a Debian container with Go 1.22.12 and
+# to the tuf-rebuild branch. Uses an Ubuntu container with Go 1.25.0 and
 # all required system dependencies.
 #
 # The build uses script/bootstrap-build which compiles all 34 Flynn binaries
@@ -35,9 +35,9 @@ jobs:
             curl \
             ca-certificates
 
-      - name: Install Go 1.22.12
+      - name: Install Go 1.25.0
         run: |
-          curl -fsSL "https://go.dev/dl/go1.22.12.linux-amd64.tar.gz" \
+          curl -fsSL "https://go.dev/dl/go1.25.0.linux-amd64.tar.gz" \
             | tar -C /usr/local -xz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
           echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
@@ -78,9 +78,9 @@ jobs:
             curl \
             ca-certificates
 
-      - name: Install Go 1.22.12
+      - name: Install Go 1.25.0
         run: |
-          curl -fsSL "https://go.dev/dl/go1.22.12.linux-amd64.tar.gz" \
+          curl -fsSL "https://go.dev/dl/go1.25.0.linux-amd64.tar.gz" \
             | tar -C /usr/local -xz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
           echo "GOROOT=/usr/local/go" >> $GITHUB_ENV

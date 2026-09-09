@@ -20,6 +20,12 @@ function getState (props) {
 	return state;
 }
 
+function formatDate (dateString) {
+	if (!dateString) return '';
+	var date = new Date(dateString);
+	return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
 var AppRoutes = React.createClass({
 	displayName: "Views.AppRoutes",
 
@@ -33,6 +39,7 @@ var AppRoutes = React.createClass({
 
 				<ul>
 					{this.state.routes.map(function (route) {
+						var certDetails = route.certificate_details;
 						return (
 							<li key={route.id || route.domain}>
 								<ExternalLink href={(shouldHTTPS(route) ? 'https://' : 'http://') + route.domain + route.path}>
@@ -42,6 +49,25 @@ var AppRoutes = React.createClass({
 									<RouteLink path={getAppPath("/routes/:type/:route/delete", {route: route.id, type: route.type, domain: route.domain})}>
 										<i className="icn-trash" />
 									</RouteLink>
+								) : null}
+								{certDetails ? (
+									<div className="certificate-details">
+										<h4>Certificate Details</h4>
+										<dl>
+											<dt>Subject</dt>
+											<dd>{certDetails.subject}</dd>
+											<dt>Issuer</dt>
+											<dd>{certDetails.issuer}</dd>
+											<dt>Valid From</dt>
+											<dd>{formatDate(certDetails.not_before)}</dd>
+											<dt>Valid Until</dt>
+											<dd>{formatDate(certDetails.not_after)}</dd>
+											<dt>Serial Number</dt>
+											<dd>{certDetails.serial_number}</dd>
+											<dt>DNS Names</dt>
+											<dd>{certDetails.dns_names.join(', ')}</dd>
+										</dl>
+									</div>
 								) : null}
 							</li>
 						);

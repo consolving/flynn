@@ -44,7 +44,8 @@ type imageSpec struct {
 	ExtraFiles    map[string]string // source file (relative to source-dir) -> dest path
 	ExtraDirs     map[string]string // source dir (relative to source-dir) -> dest path
 	Entrypoint    *ct.ImageEntrypoint
-	PackageScript string // path relative to source-dir for package install script (run in chroot on base layer)
+	PackageScript string            // path relative to source-dir for package install script (run in chroot on base layer)
+	PackageFiles  map[string]string // extra source files staged into the chroot (relative to source-dir -> chroot path)
 }
 
 func main() {
@@ -720,6 +721,18 @@ func (e *exporter) buildPackageLayer(spec imageSpec) (*ct.ImageLayer, error) {
 		return nil, fmt.Errorf("copying package script: %s", err)
 	}
 
+	// Stage any extra source files the package script needs
+	for srcRel, dstRel := range spec.PackageFiles {
+		src := filepath.Join(e.sourceDir, srcRel)
+		dst := filepath.Join(mergedDir, dstRel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return nil, fmt.Errorf("staging package file %s: %s", srcRel, err)
+		}
+		if err := copyFile(src, dst, 0755); err != nil {
+			return nil, fmt.Errorf("copying package file %s: %s", srcRel, err)
+		}
+	}
+
 	// Run the package script in chroot
 	cmd = exec.Command("chroot", mergedDir, "/bin/bash", "/tmp/packages.sh")
 	cmd.Stdout = os.Stdout
@@ -845,7 +858,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 			},
 			ExtraFiles: map[string]string{
 				"controller/start.sh":        "/bin/start-flynn-controller",
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 				"schema/common.json":         "/etc/flynn-controller/jsonschema/common.json",
 				"schema/error.json":          "/etc/flynn-controller/jsonschema/error.json",
 			},
@@ -864,7 +877,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"flynn-router": "/bin/flynn-router",
 			},
 			ExtraFiles: map[string]string{
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-router"},
@@ -896,6 +909,13 @@ func (e *exporter) imageSpecs() []imageSpec {
 			Binaries: map[string]string{
 				"flynn-dashboard": "/bin/flynn-dashboard",
 			},
+			// The dashboard binary reads its compiled web assets from disk
+			// relative to its working directory (/), see dashboard/bindata.go.
+			// Without these the web process panics at startup with
+			// "open app/build/assets/manifest.json: no such file or directory".
+			ExtraDirs: map[string]string{
+				"dashboard/app/build": "/app/build",
+			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-dashboard"},
 			},
@@ -919,7 +939,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"flynn-blobstore": "/bin/flynn-blobstore",
 			},
 			ExtraFiles: map[string]string{
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/bin/flynn-blobstore", "server"},
@@ -933,7 +953,7 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"flynn-init": "/usr/local/bin/flynn-init",
 			},
 			ExtraFiles: map[string]string{
-				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+				"util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
 				"host/zfs-mknod.sh":          "/usr/local/bin/zfs-mknod",
 				"host/udev.rules":            "/lib/udev/rules.d/10-local.rules",
 				"host/start.sh":              "/usr/local/bin/start-flynn-host.sh",
@@ -1056,6 +1076,13 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"slugbuilder/builder/build.sh":       "/builder/build.sh",
 				"slugbuilder/builder/create-user.sh": "/builder/create-user.sh",
 			},
+			// Install the build-time tools (git, daemontools, pigz, jq, curl)
+			// and the pinned Heroku buildpacks into the package layer.
+			PackageScript: "slugbuilder/img/packages.sh",
+			PackageFiles: map[string]string{
+				"slugbuilder/builder/buildpacks.txt":    "/tmp/buildpacks.txt",
+				"slugbuilder/builder/install-buildpack": "/tmp/install-buildpack",
+			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/builder/build.sh"},
 			},
@@ -1071,6 +1098,11 @@ func (e *exporter) imageSpecs() []imageSpec {
 				"slugbuilder/convert-legacy-slug.sh": "/bin/convert-legacy-slug.sh",
 				"slugbuilder/builder/build.sh":       "/builder/build.sh",
 				"slugbuilder/builder/create-user.sh": "/builder/create-user.sh",
+			},
+			PackageScript: "slugbuilder/img/packages.sh",
+			PackageFiles: map[string]string{
+				"slugbuilder/builder/buildpacks.txt":    "/tmp/buildpacks.txt",
+				"slugbuilder/builder/install-buildpack": "/tmp/install-buildpack",
 			},
 			Entrypoint: &ct.ImageEntrypoint{
 				Args: []string{"/builder/build.sh"},

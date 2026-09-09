@@ -187,7 +187,7 @@
             "host/flynn-init": "/usr/local/bin/flynn-init"
           },
           "copy": {
-            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem",
+            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt",
             "host/zfs-mknod.sh": "/usr/local/bin/zfs-mknod",
             "host/udev.rules": "/lib/udev/rules.d/10-local.rules",
             "host/start.sh": "/usr/local/bin/start-flynn-host.sh",
@@ -218,7 +218,7 @@
           },
           "copy": {
             "controller/start.sh": "/bin/start-flynn-controller",
-            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem"
+            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt"
           },
           "inputs": [
             "schema/*.json",
@@ -381,7 +381,7 @@
             "blobstore": "/bin/flynn-blobstore"
           },
           "copy": {
-            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem"
+            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt"
           },
           "limits": {
             "temp_disk": "2G"
@@ -404,7 +404,7 @@
             "router": "/bin/flynn-router"
           },
           "copy": {
-            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certs.pem"
+            "util/ca-certs/ca-certs.pem": "/etc/ssl/certs/ca-certificates.crt"
           }
         }
       ],

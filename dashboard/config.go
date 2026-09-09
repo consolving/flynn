@@ -20,6 +20,7 @@ type Config struct {
 	StatusKey               string
 	URL                     string
 	InterfaceURL            string
+	InterfaceURLDynamic     bool
 	PathPrefix              string
 	CookiePath              string
 	SecureCookies           bool
@@ -66,6 +67,13 @@ func LoadConfigFromEnv() *Config {
 		log.Fatal("URL is required!")
 	}
 	conf.InterfaceURL = conf.URL
+	// InterfaceURLDynamic, when "true", makes the dashboard serve its runtime
+	// config and accept CORS origins based on the request's own origin (Host +
+	// scheme) instead of only the fixed InterfaceURL. This lets the dashboard be
+	// reached under more than one domain (e.g. an extra ACME/Let's Encrypt route)
+	// because the frontend then loads /config from the same origin it was
+	// served from, avoiding cross-origin/CORS failures.
+	conf.InterfaceURLDynamic = os.Getenv("INTERFACE_URL_DYNAMIC") == "true"
 
 	sessionSecret := os.Getenv("SESSION_SECRET")
 	if sessionSecret == "" {

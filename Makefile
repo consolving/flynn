@@ -31,6 +31,7 @@ test-unit-root: test-unit
 # Redis, ZFS, etc.) and can run in any Linux environment with Go installed.
 TEST_PACKAGES_STANDALONE = \
 	./pkg/attempt/... \
+	./pkg/autocert/... \
 	./pkg/cors/... \
 	./pkg/ipallocator/... \
 	./pkg/lru/... \
