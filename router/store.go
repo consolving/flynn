@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 
 	controller "github.com/flynn/flynn/controller/client"
 	ct "github.com/flynn/flynn/controller/types"
@@ -16,34 +17,73 @@ type Store interface {
 }
 
 func NewControllerStore() (*ControllerStore, error) {
-	instances, err := discoverd.NewService("controller").Instances()
-	if err != nil {
-		return nil, err
-	}
-	inst := instances[0]
-	client, err := controller.NewClient("http://"+inst.Addr, inst.Meta["AUTH_KEY"])
-	if err != nil {
-		return nil, err
-	}
-	return &ControllerStore{client}, nil
+	return &ControllerStore{service: discoverd.NewService("controller")}, nil
 }
 
 type ControllerStore struct {
-	client controller.Client
+	service discoverd.Service
+}
+
+// call resolves the live controller instances for each invocation and
+// invokes fn with a client for the first instance that accepts the
+// request. Unlike pinning to the first instance at startup, this allows
+// the router to keep syncing when the previously used controller is
+// replaced or dies (the controllers and the router are restarted
+// independently, so a restarted router must not assume the original
+// instance is still in discoverd).
+func (c *ControllerStore) call(fn func(controller.Client) error) error {
+	instances, err := c.service.Instances()
+	if err != nil {
+		return err
+	}
+	if len(instances) == 0 {
+		return errors.New("router: no controller instances available")
+	}
+	var lastErr error
+	for _, inst := range instances {
+		client, err := controller.NewClient("http://"+inst.Addr, inst.Meta["AUTH_KEY"])
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if err := fn(client); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	if lastErr == nil {
+		return errors.New("router: no reachable controller instances")
+	}
+	return lastErr
 }
 
 func (c *ControllerStore) List() ([]*router.Route, error) {
-	return c.client.RouteList()
+	var routes []*router.Route
+	err := c.call(func(client controller.Client) error {
+		var err error
+		routes, err = client.RouteList()
+		return err
+	})
+	return routes, err
 }
 
 func (c *ControllerStore) Watch(ch chan *router.Event) (stream.Stream, error) {
-	events := make(chan *ct.Event)
-	eventStream, err := c.client.StreamEvents(ct.StreamEventsOptions{
-		ObjectTypes: []ct.EventType{
-			ct.EventTypeRoute,
-			ct.EventTypeRouteDeletion,
-		},
-	}, events)
+	var (
+		events      chan *ct.Event
+		eventStream stream.Stream
+	)
+	err := c.call(func(client controller.Client) error {
+		events = make(chan *ct.Event)
+		var err error
+		eventStream, err = client.StreamEvents(ct.StreamEventsOptions{
+			ObjectTypes: []ct.EventType{
+				ct.EventTypeRoute,
+				ct.EventTypeRouteDeletion,
+			},
+		}, events)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
