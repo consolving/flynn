@@ -538,7 +538,7 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 			return err
 		}
 	}
-	rootMount, diffDir, err := l.rootOverlayMount(job)
+	rootMount, diffDir, mergedUsr, err := l.rootOverlayMount(job)
 	if err != nil {
 		log.Error("error setting up rootfs", "err", err)
 		return err
@@ -699,8 +699,17 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 	binOverridesDir := "/etc/flynn/bin-overrides"
 	if entries, err := os.ReadDir(binOverridesDir); err == nil {
 		containerBinDir := filepath.Join(diffDir, "bin")
+		if mergedUsr {
+			// Debian merged-usr images ship /bin as a symlink to /usr/bin.
+			// Materializing a real /bin directory in the overlay upperdir
+			// would shadow that symlink and hide /usr/bin from every process
+			// spawned in the container (e.g. "fork/exec /runner/init: no such
+			// file or directory"), crash-looping the app. Inject overrides
+			// into usr/bin instead so they're still reached via the symlink.
+			containerBinDir = filepath.Join(diffDir, "usr", "bin")
+		}
 		if err := os.MkdirAll(containerBinDir, 0755); err != nil {
-			log.Error("error creating container /bin in overlay upperdir", "err", err)
+			log.Error("error creating container bin dir in overlay upperdir", "err", err)
 			return err
 		}
 		for _, entry := range entries {
@@ -905,24 +914,24 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 	return nil
 }
 
-func (l *LibcontainerBackend) rootOverlayMount(job *host.Job) (*configs.Mount, string, error) {
+func (l *LibcontainerBackend) rootOverlayMount(job *host.Job) (*configs.Mount, string, bool, error) {
 	log := l.Logger.New("fn", "rootOverlayMount", "job.id", job.ID)
 	layers := make([]string, 0, len(job.Mountspecs)+1)
 	for _, spec := range job.Mountspecs {
 		if spec.Type != host.MountspecTypeSquashfs {
-			return nil, "", fmt.Errorf("unknown mountspec type: %q", spec.Type)
+			return nil, "", false, fmt.Errorf("unknown mountspec type: %q", spec.Type)
 		}
 		log.Info("mounting squashfs layer", "id", spec.ID)
 		path, err := l.mountSquashfs(spec)
 		if err != nil {
-			return nil, "", err
+			return nil, "", false, err
 		}
 		layers = append(layers, path)
 	}
 	log.Info("mounting ext2 layer")
 	tmpfs, err := l.mountTmpfs(job)
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 	layers = append(layers, tmpfs)
 	dirs := make([]string, len(layers))
@@ -935,15 +944,31 @@ func (l *LibcontainerBackend) rootOverlayMount(job *host.Job) (*configs.Mount, s
 	workDir := filepath.Join(tmpfs, "overlay-workdir")
 	for _, dir := range []string{upperDir, workDir} {
 		if err := os.Mkdir(dir, 0755); err != nil {
-			return nil, "", err
+			return nil, "", false, err
 		}
 	}
+	mergedUsr := len(layers) > 0 && layerMergedUsr(layers[0])
 	return &configs.Mount{
 		Source:      "overlay",
 		Destination: "/",
 		Device:      "overlay",
 		Data:        fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", strings.Join(dirs[1:], ":"), upperDir, workDir),
-	}, upperDir, nil
+	}, upperDir, mergedUsr, nil
+}
+
+// layerMergedUsr reports whether the given (base image) layer ships /bin
+// as a symlink to /usr/bin, i.e. it is a Debian merged-usr image. This
+// matters when injecting files into the overlay upperdir: materializing a
+// real /bin directory there would shadow the symlink and hide /usr/bin
+// from every process in the container.
+func layerMergedUsr(layerPath string) bool {
+	binPath := filepath.Join(layerPath, "bin")
+	fi, err := os.Lstat(binPath)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	target, err := filepath.EvalSymlinks(binPath)
+	return err == nil && target == filepath.Join(layerPath, "usr", "bin")
 }
 
 func (l *LibcontainerBackend) mountSquashfs(m *host.Mountspec) (string, error) {
