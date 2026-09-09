@@ -97,9 +97,18 @@ func (a *Authorizer) AuthorizeRequest(req *http.Request) (*Token, error) {
 	if auth := req.Header.Get("Authorization"); auth != "" && strings.HasPrefix(auth, "Bearer ") {
 		return a.AuthorizeToken(auth)
 	}
-	user, password, _ := req.BasicAuth()
+	user, password, ok := req.BasicAuth()
 	if user == "Bearer" {
 		return a.AuthorizeToken(password)
+	}
+	if ok && password != "" {
+		return a.AuthorizeKey(password)
+	}
+	// Fall back to a "key" query parameter so browser clients that cannot set
+	// custom request headers (e.g. EventSource used by the dashboard's log
+	// streaming) can still authenticate.
+	if key := req.URL.Query().Get("key"); key != "" {
+		return a.AuthorizeKey(key)
 	}
 	return a.AuthorizeKey(password)
 }
