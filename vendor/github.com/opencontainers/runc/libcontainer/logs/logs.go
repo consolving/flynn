@@ -1,102 +1,77 @@
+// Package logs provides helpers for logging used within runc (specifically for
+// forwarding logs from "runc init" to the main runc process).
 package logs
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
-	"os"
-	"strconv"
-	"sync"
 
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	configureMutex = sync.Mutex{}
-	// loggingConfigured will be set once logging has been configured via invoking `ConfigureLogging`.
-	// Subsequent invocations of `ConfigureLogging` would be no-op
-	loggingConfigured = false
-)
+var fatalsSep = []byte("; ")
 
-type Config struct {
-	LogLevel    logrus.Level
-	LogFormat   string
-	LogFilePath string
-	LogPipeFd   string
-}
+func ForwardLogs(logPipe io.ReadCloser) chan error {
+	done := make(chan error, 1)
+	s := bufio.NewScanner(logPipe)
 
-func ForwardLogs(logPipe io.Reader) {
-	lineReader := bufio.NewReader(logPipe)
-	for {
-		line, err := lineReader.ReadBytes('\n')
-		if len(line) > 0 {
-			processEntry(line)
-		}
-		if err == io.EOF {
-			logrus.Debugf("log pipe has been closed: %+v", err)
-			return
-		}
-		if err != nil {
-			logrus.Errorf("log pipe read error: %+v", err)
-		}
-	}
-}
-
-func processEntry(text []byte) {
-	type jsonLog struct {
-		Level string `json:"level"`
-		Msg   string `json:"msg"`
+	logger := logrus.StandardLogger()
+	if logger.ReportCaller {
+		// Need a copy of the standard logger, but with ReportCaller
+		// turned off, as the logs are merely forwarded and their
+		// true source is not this file/line/function.
+		logNoCaller := *logrus.StandardLogger()
+		logNoCaller.ReportCaller = false
+		logger = &logNoCaller
 	}
 
-	var jl jsonLog
+	go func() {
+		fatals := []byte{}
+		for s.Scan() {
+			fatals = processEntry(s.Bytes(), logger, fatals)
+		}
+		if err := s.Err(); err != nil {
+			logrus.Errorf("error reading from log source: %v", err)
+		}
+		if err := logPipe.Close(); err != nil {
+			logrus.Errorf("error closing log source: %v", err)
+		}
+		// The only error we return is fatal messages from runc init.
+		var err error
+		if len(fatals) > 0 {
+			err = errors.New(string(bytes.TrimSuffix(fatals, fatalsSep)))
+		}
+		done <- err
+		close(done)
+	}()
+
+	return done
+}
+
+// processEntry parses the error and either logs it via the standard logger or,
+// if this is a fatal error, appends its text to fatals.
+func processEntry(text []byte, logger *logrus.Logger, fatals []byte) []byte {
+	if len(text) == 0 {
+		return fatals
+	}
+
+	var jl struct {
+		Level logrus.Level `json:"level"`
+		Msg   string       `json:"msg"`
+	}
 	if err := json.Unmarshal(text, &jl); err != nil {
-		logrus.Errorf("failed to decode %q to json: %+v", text, err)
-		return
+		logrus.Errorf("failed to decode %q to json: %v", text, err)
+		return fatals
 	}
 
-	lvl, err := logrus.ParseLevel(jl.Level)
-	if err != nil {
-		logrus.Errorf("failed to parse log level %q: %v\n", jl.Level, err)
-		return
+	if jl.Level == logrus.FatalLevel {
+		fatals = append(fatals, jl.Msg...)
+		fatals = append(fatals, fatalsSep...)
+	} else {
+		logger.Log(jl.Level, jl.Msg)
 	}
-	logrus.StandardLogger().Logf(lvl, jl.Msg)
-}
-
-func ConfigureLogging(config Config) error {
-	configureMutex.Lock()
-	defer configureMutex.Unlock()
-
-	if loggingConfigured {
-		logrus.Debug("logging has already been configured")
-		return nil
-	}
-
-	logrus.SetLevel(config.LogLevel)
-
-	if config.LogPipeFd != "" {
-		logPipeFdInt, err := strconv.Atoi(config.LogPipeFd)
-		if err != nil {
-			return fmt.Errorf("failed to convert _LIBCONTAINER_LOGPIPE environment variable value %q to int: %v", config.LogPipeFd, err)
-		}
-		logrus.SetOutput(os.NewFile(uintptr(logPipeFdInt), "logpipe"))
-	} else if config.LogFilePath != "" {
-		f, err := os.OpenFile(config.LogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0644)
-		if err != nil {
-			return err
-		}
-		logrus.SetOutput(f)
-	}
-
-	switch config.LogFormat {
-	case "text":
-		// retain logrus's default.
-	case "json":
-		logrus.SetFormatter(new(logrus.JSONFormatter))
-	default:
-		return fmt.Errorf("unknown log-format %q", config.LogFormat)
-	}
-
-	loggingConfigured = true
-	return nil
+	return fatals
 }

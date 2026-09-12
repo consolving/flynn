@@ -1,4 +1,4 @@
-// +build linux,gccgo
+//go:build linux && gccgo
 
 package nsenter
 

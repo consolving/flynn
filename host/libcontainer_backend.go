@@ -47,11 +47,12 @@ import (
 	"github.com/inconshreveable/log15"
 	dhcp "github.com/krolaw/dhcp4"
 	"github.com/miekg/dns"
+	"github.com/opencontainers/cgroups"
 	"github.com/opencontainers/runc/libcontainer"
-	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/rancher/sparse-tools/sparse"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -77,15 +78,6 @@ type LibcontainerConfig struct {
 }
 
 func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
-	factory, err := libcontainer.New(
-		containerRoot,
-		libcontainer.Cgroupfs,
-		libcontainer.InitArgs(os.Args[0], "libcontainer-init"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := setupCGroups(config.PartitionCGroups); err != nil {
 		return nil, err
 	}
@@ -102,7 +94,6 @@ func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
 
 	l := &LibcontainerBackend{
 		LibcontainerConfig:  config,
-		factory:             factory,
 		logStreams:          make(map[string]map[string]*logmux.LogStream),
 		containers:          make(map[string]*Container),
 		defaultEnv:          make(map[string]string),
@@ -147,7 +138,6 @@ func NewLibcontainerBackend(config *LibcontainerConfig) (Backend, error) {
 type LibcontainerBackend struct {
 	*LibcontainerConfig
 
-	factory libcontainer.Factory
 	host    *Host
 	ipalloc *ipallocator.IPAllocator
 
@@ -182,15 +172,18 @@ type LibcontainerBackend struct {
 }
 
 type Container struct {
-	ID        string         `json:"id"`
-	RootPath  string         `json:"root_path"`
-	TmpPath   string         `json:"tmp_path"`
-	IP        net.IP         `json:"ip"`
-	MAC       string         `json:"mac"`
-	Hostname  string         `json:"hostname"`
-	MuxConfig *logmux.Config `json:"mux_config"`
+	ID       string `json:"id"`
+	RootPath string `json:"root_path"`
+	TmpPath  string `json:"tmp_path"`
+	IP       net.IP `json:"ip"`
+	MAC      string `json:"mac"`
+	Hostname string `json:"hostname"`
+	// HostInterface is the host-side end of the job's veth pair, kept
+	// around so it can be removed when the container is cleaned up.
+	HostInterface string         `json:"host_interface"`
+	MuxConfig     *logmux.Config `json:"mux_config"`
 
-	container libcontainer.Container
+	container *libcontainer.Container
 	job       *host.Job
 	l         *LibcontainerBackend
 	done      chan struct{}
@@ -566,11 +559,11 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 			{Type: configs.NEWUTS},
 			{Type: configs.NEWIPC},
 		}),
-		Cgroups: &configs.Cgroup{
+		Cgroups: &cgroups.Cgroup{
 			Path: filepath.Join("/flynn", job.Partition, job.ID),
-			Resources: &configs.Resources{
-				AllowedDevices: host.ConfigDevices(*job.Config.AllowedDevices),
-				Memory:         defaultMemory,
+			Resources: &cgroups.Resources{
+				Devices: host.CgroupRules(*job.Config.AllowedDevices),
+				Memory:  defaultMemory,
 			},
 		},
 		MaskPaths: []string{
@@ -851,24 +844,34 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 		if err != nil {
 			return err
 		}
+		peerName, err := ifname.Generate("vethp", 4)
+		if err != nil {
+			return err
+		}
+		// Create the veth pair on the host: the host-side end is
+		// attached to the bridge, while the container-side end (the
+		// peer) is left in the host's network namespace for
+		// libcontainer to move into the container's namespace (via
+		// NetDevices below) before the container's init starts.
+		if err := createVethPair(ifaceName, peerName); err != nil {
+			log.Error("error creating veth pair", "err", err)
+			return err
+		}
+		if err := attachVethToBridge(ifaceName, l.BridgeName); err != nil {
+			deleteLinkByName(ifaceName)
+			log.Error("error attaching veth to bridge", "err", err)
+			return err
+		}
+		container.HostInterface = ifaceName
 		config.Hostname = hostname
 		config.Namespaces = append(config.Namespaces, configs.Namespace{Type: configs.NEWNET})
-		config.Networks = []*configs.Network{
-			{
-				Type:    "loopback",
-				Address: "127.0.0.1/0",
-				Gateway: "localhost",
-			},
-			{
-				Type:              "veth",
-				Name:              "eth0",
-				Bridge:            l.BridgeName,
-				MacAddress:        initConfig.MAC,
-				Address:           initConfig.IP,
-				Gateway:           initConfig.Gateway,
-				Mtu:               1500,
-				HostInterfaceName: ifaceName,
-			},
+		// libcontainer moves the peer into the container's netns and
+		// renames it to eth0. The remaining in-namespace setup
+		// (loopback, eth0 MAC/address/MTU/gateway) is done from the
+		// host after the container starts (see
+		// configureContainerNetwork).
+		config.NetDevices = map[string]*configs.LinuxNetDevice{
+			peerName: {Name: "eth0"},
 		}
 	}
 	if spec, ok := job.Resources[resource.TypeMemory]; ok && spec.Limit != nil {
@@ -883,15 +886,15 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 		}
 	}
 
-	c, err := l.factory.Create(job.ID, config)
+	c, err := libcontainer.Create(containerRoot, job.ID, config)
 	if err != nil {
 		return err
 	}
 
 	process := &libcontainer.Process{
-		Init: true,
+		UID:  0,
+		GID:  0,
 		Args: []string{"/.containerinit", job.ID},
-		User: "root",
 	}
 	if err := c.Run(process); err != nil {
 		c.Destroy()
@@ -903,6 +906,17 @@ func (l *LibcontainerBackend) Run(job *host.Job, runConfig *RunConfig, rateLimit
 	if err != nil {
 		c.Destroy()
 		return err
+	}
+	if !job.Config.HostNetwork {
+		// The container's network namespace now exists and libcontainer
+		// has moved the veth peer into it as eth0. Finish the
+		// in-namespace network setup (loopback, eth0 addressing) from
+		// the host before the container's init starts the job.
+		if err := configureContainerNetwork(pid, initConfig); err != nil {
+			log.Error("error configuring container network", "err", err)
+			c.Destroy()
+			return err
+		}
 	}
 	l.State.SetContainerPID(job.ID, pid)
 
@@ -1307,6 +1321,16 @@ func (c *Container) cleanup() error {
 	log := c.l.Logger.New("fn", "cleanup", "job.id", c.job.ID)
 	log.Info("starting cleanup")
 
+	// Remove the host-side end of the job's veth pair, if it still
+	// exists. The container-side end disappears with the container's
+	// network namespace; the host-side end would otherwise stay
+	// attached to the bridge indefinitely.
+	if c.HostInterface != "" {
+		if err := deleteLinkByName(c.HostInterface); err != nil {
+			log.Debug("error deleting host veth", "iface", c.HostInterface, "err", err)
+		}
+	}
+
 	c.l.logStreamMtx.Lock()
 	for _, s := range c.l.logStreams[c.job.ID] {
 		s.Close()
@@ -1634,7 +1658,7 @@ func (l *LibcontainerBackend) UnmarshalState(jobs map[string]*host.ActiveJob, jo
 			container.MuxConfig = &logmux.Config{}
 		}
 		container.MuxConfig.HostID = l.State.id
-		c, err := l.factory.Load(container.ID)
+		c, err := libcontainer.Load(containerRoot, container.ID)
 		if err != nil {
 			return fmt.Errorf("error loading container state: %s", err)
 		}
@@ -1757,6 +1781,145 @@ func (l *LibcontainerBackend) CloseLogs() (host.LogBuffers, error) {
 		delete(l.logStreams, id)
 	}
 	return buffers, nil
+}
+
+// deleteLinkByName removes the link with the given name; not finding it is
+// not an error.
+func deleteLinkByName(name string) error {
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		var nlf netlink.LinkNotFoundError
+		if errors.As(err, &nlf) {
+			return nil
+		}
+		return err
+	}
+	return netlink.LinkDel(link)
+}
+
+// createVethPair creates a veth pair in the host's network namespace: the
+// end named hostIf stays in the host namespace, the peer end named peerIf
+// is the one that will be moved into the container's namespace.
+func createVethPair(hostIf, peerIf string) (err error) {
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: hostIf},
+		PeerName:  peerIf,
+	}
+	if err := netlink.LinkAdd(veth); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(veth)
+		}
+	}()
+	return nil
+}
+
+// attachVethToBridge attaches the host-side end of a veth pair to the given
+// bridge and brings it up.
+func attachVethToBridge(iface, bridge string) error {
+	brl, err := netlink.LinkByName(bridge)
+	if err != nil {
+		return err
+	}
+	br, ok := brl.(*netlink.Bridge)
+	if !ok {
+		return fmt.Errorf("wrong device type %T for bridge %q", brl, bridge)
+	}
+	host, err := netlink.LinkByName(iface)
+	if err != nil {
+		return err
+	}
+	if err := netlink.LinkSetMaster(host, br); err != nil {
+		return err
+	}
+	if err := netlink.LinkSetMTU(host, 1500); err != nil {
+		return err
+	}
+	return netlink.LinkSetUp(host)
+}
+
+// configureContainerNetwork finishes the container's network setup from the
+// host side by temporarily entering the container's network namespace: it
+// brings up the loopback and configures eth0 (MAC, address, MTU and default
+// route). It replaces the in-namespace network setup that used to be
+// performed by the vendored runc network strategies.
+func configureContainerNetwork(pid int, initConfig *containerinit.Config) error {
+	// keep the host's network namespace around so we can switch back
+	hostNs, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		return err
+	}
+	defer hostNs.Close()
+
+	ctrNs, err := os.Open(fmt.Sprintf("/proc/%d/ns/net", pid))
+	if err != nil {
+		return err
+	}
+	defer ctrNs.Close()
+
+	if err := unix.Setns(int(ctrNs.Fd()), unix.CLONE_NEWNET); err != nil {
+		return fmt.Errorf("error entering container network namespace: %s", err)
+	}
+	defer func() {
+		if err := unix.Setns(int(hostNs.Fd()), unix.CLONE_NEWNET); err != nil {
+			// the daemon would now operate in the wrong network
+			// namespace; there is no safe recovery, so exit
+			log15.Root().Error("error returning to host network namespace", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	// bring up the loopback
+	lo, err := netlink.LinkByName("lo")
+	if err != nil {
+		return err
+	}
+	if err := netlink.LinkSetUp(lo); err != nil {
+		return err
+	}
+
+	// configure eth0
+	eth0, err := netlink.LinkByName("eth0")
+	if err != nil {
+		return err
+	}
+	if initConfig.MAC != "" {
+		mac, err := net.ParseMAC(initConfig.MAC)
+		if err != nil {
+			return err
+		}
+		if err := netlink.LinkSetHardwareAddr(eth0, mac); err != nil {
+			return err
+		}
+	}
+	if initConfig.IP != "" {
+		ip, err := netlink.ParseAddr(initConfig.IP)
+		if err != nil {
+			return err
+		}
+		if err := netlink.AddrAdd(eth0, ip); err != nil {
+			return err
+		}
+	}
+	if err := netlink.LinkSetMTU(eth0, 1500); err != nil {
+		return err
+	}
+	if err := netlink.LinkSetUp(eth0); err != nil {
+		return err
+	}
+	if initConfig.Gateway != "" {
+		gw := net.ParseIP(initConfig.Gateway)
+		if err := netlink.RouteAdd(&netlink.Route{
+			Scope:     netlink.SCOPE_UNIVERSE,
+			LinkIndex: eth0.Attrs().Index,
+			Gw:        gw,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func bindMount(src, dest string, writeable bool) *configs.Mount {

@@ -49,6 +49,12 @@ cloud.google.com/go/storage/experimental
 cloud.google.com/go/storage/internal
 cloud.google.com/go/storage/internal/apiv2
 cloud.google.com/go/storage/internal/apiv2/storagepb
+# cyphar.com/go-pathrs v0.2.5
+## explicit; go 1.18
+cyphar.com/go-pathrs
+cyphar.com/go-pathrs/internal/fdutils
+cyphar.com/go-pathrs/internal/libpathrs
+cyphar.com/go-pathrs/procfs
 # github.com/Azure/azure-sdk-for-go v68.0.0+incompatible => github.com/Azure/azure-sdk-for-go v0.0.0-20160912221952-63d3f3e3b12f
 ## explicit
 github.com/Azure/azure-sdk-for-go/storage
@@ -69,6 +75,9 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric
 # github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0
 ## explicit; go 1.23.0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping
+# github.com/aperturerobotics/protobuf-go-lite v0.14.0
+## explicit; go 1.23
+github.com/aperturerobotics/protobuf-go-lite
 # github.com/armon/go-metrics v0.0.0-20150601112433-b2d95e5291cd
 ## explicit
 github.com/armon/go-metrics
@@ -110,9 +119,11 @@ github.com/cenkalti/backoff/v5
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/checkpoint-restore/go-criu v0.0.0-20181120144056-17b0214f6c48
-## explicit
-github.com/checkpoint-restore/go-criu/rpc
+# github.com/checkpoint-restore/go-criu/v8 v8.3.0
+## explicit; go 1.25.0
+github.com/checkpoint-restore/go-criu/v8
+github.com/checkpoint-restore/go-criu/v8/internal/proto
+github.com/checkpoint-restore/go-criu/v8/rpc
 # github.com/cheggaaa/pb v0.0.0-20150223212723-0464652af750
 ## explicit
 github.com/cheggaaa/pb
@@ -126,25 +137,36 @@ github.com/cncf/xds/go/xds/data/orca/v3
 github.com/cncf/xds/go/xds/service/orca/v3
 github.com/cncf/xds/go/xds/type/matcher/v3
 github.com/cncf/xds/go/xds/type/v3
-# github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
-## explicit
+# github.com/containerd/console v1.0.5
+## explicit; go 1.13
 github.com/containerd/console
-# github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
-## explicit
-github.com/coreos/go-systemd/dbus
+# github.com/coreos/go-systemd/v22 v22.7.0
+## explicit; go 1.23
+github.com/coreos/go-systemd/v22/dbus
 # github.com/creack/pty v1.1.9
 ## explicit; go 1.13
 github.com/creack/pty
 # github.com/cupcake/jsonschema v0.0.0-20160618151340-51bf6945446b
 ## explicit
 github.com/cupcake/jsonschema
-# github.com/cyphar/filepath-securejoin v0.2.2
-## explicit
+# github.com/cyphar/filepath-securejoin v0.7.0
+## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
+github.com/cyphar/filepath-securejoin/internal/consts
+github.com/cyphar/filepath-securejoin/pathrs-lite
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/assert
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/fd
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/gocompat
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/gopathrs
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/kernelversion
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/linux
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/procfs
+github.com/cyphar/filepath-securejoin/pathrs-lite/procfs
 # github.com/dgryski/go-skip32 v0.0.0-20131221203938-6cc5a8b574de
 ## explicit
 github.com/dgryski/go-skip32
-# github.com/docker/go-units v0.3.0
+# github.com/docker/go-units v0.5.0
 ## explicit
 github.com/docker/go-units
 # github.com/dustin/go-humanize v1.0.0
@@ -246,12 +268,7 @@ github.com/go-acme/lego/v4/challenge/resolver
 github.com/go-acme/lego/v4/challenge/tlsalpn01
 github.com/go-acme/lego/v4/lego
 github.com/go-acme/lego/v4/log
-github.com/go-acme/lego/v4/platform/config/env
 github.com/go-acme/lego/v4/platform/wait
-github.com/go-acme/lego/v4/providers/dns/autodns
-github.com/go-acme/lego/v4/providers/dns/autodns/internal
-github.com/go-acme/lego/v4/providers/dns/internal/clientdebug
-github.com/go-acme/lego/v4/providers/dns/internal/errutils
 github.com/go-acme/lego/v4/registration
 # github.com/go-ini/ini v1.12.0
 ## explicit
@@ -274,9 +291,9 @@ github.com/go-sql-driver/mysql
 # github.com/go-stack/stack v1.7.0
 ## explicit
 github.com/go-stack/stack
-# github.com/godbus/dbus v4.1.0+incompatible => github.com/godbus/dbus/v5 v5.0.2
-## explicit; go 1.12
-github.com/godbus/dbus
+# github.com/godbus/dbus/v5 v5.2.2
+## explicit; go 1.20
+github.com/godbus/dbus/v5
 # github.com/golang/glog v1.2.5
 ## explicit; go 1.19
 github.com/golang/glog
@@ -445,43 +462,69 @@ github.com/mistifyio/go-zfs
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
 github.com/mitchellh/go-homedir
+# github.com/moby/sys/capability v0.4.0
+## explicit; go 1.21
+github.com/moby/sys/capability
+# github.com/moby/sys/mountinfo v0.7.2
+## explicit; go 1.17
+github.com/moby/sys/mountinfo
+# github.com/moby/sys/user v0.4.0
+## explicit; go 1.17
+github.com/moby/sys/user
+# github.com/moby/sys/userns v0.1.0
+## explicit; go 1.21
+github.com/moby/sys/userns
 # github.com/montanaflynn/stats v0.7.1
 ## explicit; go 1.13
 github.com/montanaflynn/stats
-# github.com/mrunalp/fileutils v0.0.0-20171103030105-7d4729fb3618
-## explicit
+# github.com/mrunalp/fileutils v0.5.1
+## explicit; go 1.13
 github.com/mrunalp/fileutils
 # github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 ## explicit
 # github.com/olekukonko/ts v0.0.0-20140412220145-ecf753e7c962
 ## explicit
 github.com/olekukonko/ts
-# github.com/opencontainers/runc v1.0.0-rc8 => github.com/flynn/runc v1.0.0-rc1001
-## explicit
+# github.com/opencontainers/cgroups v0.0.6
+## explicit; go 1.23.0
+github.com/opencontainers/cgroups
+github.com/opencontainers/cgroups/devices/config
+github.com/opencontainers/cgroups/fs
+github.com/opencontainers/cgroups/fs2
+github.com/opencontainers/cgroups/fscommon
+github.com/opencontainers/cgroups/internal/path
+github.com/opencontainers/cgroups/manager
+github.com/opencontainers/cgroups/systemd
+# github.com/opencontainers/runc v1.5.1
+## explicit; go 1.25.0
+github.com/opencontainers/runc/internal/cmsg
+github.com/opencontainers/runc/internal/linux
+github.com/opencontainers/runc/internal/pathrs
+github.com/opencontainers/runc/internal/sys
 github.com/opencontainers/runc/libcontainer
 github.com/opencontainers/runc/libcontainer/apparmor
-github.com/opencontainers/runc/libcontainer/cgroups
-github.com/opencontainers/runc/libcontainer/cgroups/fs
-github.com/opencontainers/runc/libcontainer/cgroups/systemd
+github.com/opencontainers/runc/libcontainer/capabilities
 github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/configs/validate
+github.com/opencontainers/runc/libcontainer/exeseal
 github.com/opencontainers/runc/libcontainer/intelrdt
+github.com/opencontainers/runc/libcontainer/internal/userns
 github.com/opencontainers/runc/libcontainer/keys
 github.com/opencontainers/runc/libcontainer/logs
-github.com/opencontainers/runc/libcontainer/mount
 github.com/opencontainers/runc/libcontainer/nsenter
 github.com/opencontainers/runc/libcontainer/seccomp
-github.com/opencontainers/runc/libcontainer/stacktrace
+github.com/opencontainers/runc/libcontainer/seccomp/patchbpf
 github.com/opencontainers/runc/libcontainer/system
-github.com/opencontainers/runc/libcontainer/user
 github.com/opencontainers/runc/libcontainer/utils
-# github.com/opencontainers/runtime-spec v1.0.1
+github.com/opencontainers/runc/types
+# github.com/opencontainers/runtime-spec v1.3.0
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
-# github.com/opencontainers/selinux v1.2.2
-## explicit
+# github.com/opencontainers/selinux v1.13.1
+## explicit; go 1.19
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
+github.com/opencontainers/selinux/pkg/pwalkdir
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
@@ -503,11 +546,11 @@ github.com/rnd42/go-jsonpointer
 # github.com/rs/cors v1.7.0
 ## explicit
 github.com/rs/cors
-# github.com/seccomp/libseccomp-golang v0.0.0-20160531183505-32f571b70023
-## explicit
+# github.com/seccomp/libseccomp-golang v0.11.1
+## explicit; go 1.19
 github.com/seccomp/libseccomp-golang
-# github.com/sirupsen/logrus v1.9.3
-## explicit; go 1.13
+# github.com/sirupsen/logrus v1.9.4
+## explicit; go 1.17
 github.com/sirupsen/logrus
 # github.com/smartystreets/goconvey v0.0.0-20190710185942-9d28bd7c0945
 ## explicit
@@ -525,18 +568,15 @@ github.com/spiffe/go-spiffe/v2/spiffeid
 ## explicit
 github.com/stevvooe/resumable
 github.com/stevvooe/resumable/sha512
-# github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
-## explicit
-github.com/syndtr/gocapability/capability
 # github.com/tent/canonical-json-go v0.0.0-20130607151641-96e4ba3a7613
 ## explicit
 github.com/tent/canonical-json-go
-# github.com/vishvananda/netlink v0.0.0-20170502164845-1e045880fbc2
-## explicit
+# github.com/vishvananda/netlink v1.3.1
+## explicit; go 1.12
 github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl
-# github.com/vishvananda/netns v0.0.0-20170219233438-54f0e4339ce7
-## explicit
+# github.com/vishvananda/netns v0.0.5
+## explicit; go 1.17
 github.com/vishvananda/netns
 # github.com/xdg-go/pbkdf2 v1.0.0
 ## explicit; go 1.9
@@ -715,7 +755,7 @@ golang.org/x/oauth2/jwt
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.43.0
+# golang.org/x/sys v0.46.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
@@ -1020,7 +1060,6 @@ gotest.tools/internal/format
 gotest.tools/internal/source
 # labix.org/v2/mgo v0.0.0-20140701140051-000000000287
 ## explicit
-# github.com/opencontainers/runc => github.com/flynn/runc v1.0.0-rc1001
-# github.com/godbus/dbus => github.com/godbus/dbus/v5 v5.0.2
+# github.com/godbus/dbus => github.com/godbus/dbus/v5 v5.2.2
 # github.com/coreos/pkg => github.com/flynn/coreos-pkg v1.0.1
 # github.com/Azure/azure-sdk-for-go => github.com/Azure/azure-sdk-for-go v0.0.0-20160912221952-63d3f3e3b12f

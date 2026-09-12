@@ -1,14 +1,10 @@
+// Package utils provides general helper utilities used in libcontainer.
 package utils
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -16,29 +12,6 @@ import (
 const (
 	exitSignalOffset = 128
 )
-
-// GenerateRandomName returns a new name joined with a prefix.  This size
-// specified is used to truncate the randomly generated value
-func GenerateRandomName(prefix string, size int) (string, error) {
-	id := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, id); err != nil {
-		return "", err
-	}
-	if size > 64 {
-		size = 64
-	}
-	return prefix + hex.EncodeToString(id)[:size], nil
-}
-
-// ResolveRootfs ensures that the current working directory is
-// not a symlink and returns the absolute path to the rootfs
-func ResolveRootfs(uncleanRootfs string) (string, error) {
-	rootfs, err := filepath.Abs(uncleanRootfs)
-	if err != nil {
-		return "", err
-	}
-	return filepath.EvalSymlinks(rootfs)
-}
 
 // ExitStatus returns the correct exit status for a process based on if it
 // was signaled or exited cleanly
@@ -50,7 +23,10 @@ func ExitStatus(status unix.WaitStatus) int {
 }
 
 // WriteJSON writes the provided struct v to w using standard json marshaling
-func WriteJSON(w io.Writer, v interface{}) error {
+// without a trailing newline. This is used instead of json.Encoder because
+// there might be a problem in json decoder in some cases, see:
+// https://github.com/docker/docker/issues/14203#issuecomment-174177790
+func WriteJSON(w io.Writer, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -59,48 +35,16 @@ func WriteJSON(w io.Writer, v interface{}) error {
 	return err
 }
 
-// CleanPath makes a path safe for use with filepath.Join. This is done by not
-// only cleaning the path, but also (if the path is relative) adding a leading
-// '/' and cleaning it (then removing the leading '/'). This ensures that a
-// path resulting from prepending another path will always resolve to lexically
-// be a subdirectory of the prefixed path. This is all done lexically, so paths
-// that include symlinks won't be safe as a result of using CleanPath.
-func CleanPath(path string) string {
-	// Deal with empty strings nicely.
-	if path == "" {
-		return ""
-	}
-
-	// Ensure that all paths are cleaned (especially problematic ones like
-	// "/../../../../../" which can cause lots of issues).
-	path = filepath.Clean(path)
-
-	// If the path isn't absolute, we need to do more processing to fix paths
-	// such as "../../../../<etc>/some/path". We also shouldn't convert absolute
-	// paths to relative ones.
-	if !filepath.IsAbs(path) {
-		path = filepath.Clean(string(os.PathSeparator) + path)
-		// This can't fail, as (by definition) all paths are relative to root.
-		path, _ = filepath.Rel(string(os.PathSeparator), path)
-	}
-
-	// Clean the path again for good measure.
-	return filepath.Clean(path)
-}
-
-// SearchLabels searches a list of key-value pairs for the provided key and
-// returns the corresponding value. The pairs must be separated with '='.
-func SearchLabels(labels []string, query string) string {
-	for _, l := range labels {
-		parts := strings.SplitN(l, "=", 2)
-		if len(parts) < 2 {
-			continue
-		}
-		if parts[0] == query {
-			return parts[1]
+// SearchLabels searches through a list of key=value pairs for a given key,
+// returning its value, and the binary flag telling whether the key exist.
+func SearchLabels(labels []string, key string) (string, bool) {
+	key += "="
+	for _, s := range labels {
+		if val, ok := strings.CutPrefix(s, key); ok {
+			return val, true
 		}
 	}
-	return ""
+	return "", false
 }
 
 // Annotations returns the bundle path and user defined annotations from the
@@ -109,19 +53,15 @@ func SearchLabels(labels []string, query string) string {
 func Annotations(labels []string) (bundle string, userAnnotations map[string]string) {
 	userAnnotations = make(map[string]string)
 	for _, l := range labels {
-		parts := strings.SplitN(l, "=", 2)
-		if len(parts) < 2 {
+		name, value, ok := strings.Cut(l, "=")
+		if !ok {
 			continue
 		}
-		if parts[0] == "bundle" {
-			bundle = parts[1]
+		if name == "bundle" {
+			bundle = value
 		} else {
-			userAnnotations[parts[0]] = parts[1]
+			userAnnotations[name] = value
 		}
 	}
-	return
-}
-
-func GetIntSize() int {
-	return int(unsafe.Sizeof(1))
+	return bundle, userAnnotations
 }

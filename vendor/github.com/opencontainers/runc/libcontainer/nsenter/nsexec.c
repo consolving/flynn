@@ -26,6 +26,8 @@
 #include <linux/netlink.h>
 #include <linux/types.h>
 
+#include "getenv.h"
+#include "log.h"
 /* Get all of the CLONE_NEW* flags. */
 #include "namespace.h"
 
@@ -36,19 +38,19 @@ enum sync_t {
 	SYNC_RECVPID_PLS = 0x42,	/* Tell parent we're sending the PID. */
 	SYNC_RECVPID_ACK = 0x43,	/* PID was correctly received by parent. */
 	SYNC_GRANDCHILD = 0x44,	/* The grandchild is ready to run. */
-	SYNC_CHILD_READY = 0x45,	/* The child or grandchild is ready to return. */
+	SYNC_CHILD_FINISH = 0x45,	/* The child or grandchild has finished. */
+	SYNC_TIMEOFFSETS_PLS = 0x46,	/* Request parent to write timens offsets. */
+	SYNC_TIMEOFFSETS_ACK = 0x47,	/* Timens offsets were written. */
 };
 
-/*
- * Synchronisation value for cgroup namespace setup.
- * The same constant is defined in process_linux.go as "createCgroupns".
- */
-#define CREATECGROUPNS 0x80
-
+#define STAGE_SETUP  -1
 /* longjmp() arguments. */
-#define JUMP_PARENT 0x00
-#define JUMP_CHILD  0xA0
-#define JUMP_INIT   0xA1
+#define STAGE_PARENT  0
+#define STAGE_CHILD   1
+#define STAGE_INIT    2
+
+/* Stores the current stage of nsexec. */
+int current_stage = STAGE_SETUP;
 
 /* Assume the stack grows down, so arguments should be above it. */
 struct clone_t {
@@ -56,7 +58,7 @@ struct clone_t {
 	 * Reserve some space for clone() to locate arguments
 	 * and retcode in this place
 	 */
-	char stack[4096] __attribute__ ((aligned(16)));
+	char stack[4096] __attribute__((aligned(16)));
 	char stack_ptr[0];
 
 	/* There's two children. This is used to execute the different code. */
@@ -87,46 +89,42 @@ struct nlconfig_t {
 	size_t uidmappath_len;
 	char *gidmappath;
 	size_t gidmappath_len;
+
+	/* Time NS offsets. */
+	char *timensoffset;
+	size_t timensoffset_len;
 };
-
-#define PANIC   "panic"
-#define FATAL   "fatal"
-#define ERROR   "error"
-#define WARNING "warning"
-#define INFO    "info"
-#define DEBUG   "debug"
-
-static int logfd = -1;
 
 /*
  * List of netlink message types sent to us as part of bootstrapping the init.
  * These constants are defined in libcontainer/message_linux.go.
  */
-#define INIT_MSG			62000
+#define INIT_MSG		62000
 #define CLONE_FLAGS_ATTR	27281
 #define NS_PATHS_ATTR		27282
-#define UIDMAP_ATTR			27283
-#define GIDMAP_ATTR			27284
+#define UIDMAP_ATTR		27283
+#define GIDMAP_ATTR		27284
 #define SETGROUP_ATTR		27285
 #define OOM_SCORE_ADJ_ATTR	27286
 #define ROOTLESS_EUID_ATTR	27287
-#define UIDMAPPATH_ATTR	    27288
-#define GIDMAPPATH_ATTR	    27289
+#define UIDMAPPATH_ATTR		27288
+#define GIDMAPPATH_ATTR		27289
+#define TIMENSOFFSET_ATTR	27290
 
 /*
  * Use the raw syscall for versions of glibc which don't include a function for
  * it, namely (glibc 2.12).
  */
 #if __GLIBC__ == 2 && __GLIBC_MINOR__ < 14
-#	define _GNU_SOURCE
-#	include "syscall.h"
-#	if !defined(SYS_setns) && defined(__NR_setns)
-#		define SYS_setns __NR_setns
-#	endif
+#  define _GNU_SOURCE
+#  include "syscall.h"
+#  if !defined(SYS_setns) && defined(__NR_setns)
+#    define SYS_setns __NR_setns
+#  endif
 
-#ifndef SYS_setns
-#	error "setns(2) syscall not supported by glibc version"
-#endif
+#  ifndef SYS_setns
+#    error "setns(2) syscall not supported by glibc version"
+#  endif
 
 int setns(int fd, int nstype)
 {
@@ -134,35 +132,8 @@ int setns(int fd, int nstype)
 }
 #endif
 
-static void write_log_with_info(const char *level, const char *function, int line, const char *format, ...)
-{
-	char message[1024] = {};
-
-	va_list args;
-
-	if (logfd < 0 || level == NULL)
-		return;
-
-	va_start(args, format);
-	if (vsnprintf(message, sizeof(message), format, args) < 0)
-		goto done;
-
-	dprintf(logfd, "{\"level\":\"%s\", \"msg\": \"%s:%d %s\"}\n", level, function, line, message);
-done:
-	va_end(args);
-}
-
-#define write_log(level, fmt, ...) \
-	write_log_with_info((level), __FUNCTION__, __LINE__, (fmt), ##__VA_ARGS__)
-
 /* XXX: This is ugly. */
 static int syncfd = -1;
-
-#define bail(fmt, ...)                                       \
-	do {                                                       \
-		write_log(FATAL, "nsenter: " fmt ": %m", ##__VA_ARGS__); \
-		exit(1);                                                 \
-	} while(0)
 
 static int write_file(char *data, size_t data_len, char *pathfmt, ...)
 {
@@ -187,7 +158,7 @@ static int write_file(char *data, size_t data_len, char *pathfmt, ...)
 		goto out;
 	}
 
- out:
+out:
 	close(fd);
 	return ret;
 }
@@ -237,7 +208,7 @@ static int try_mapping_tool(const char *app, int pid, char *map, size_t map_len)
 	 * or programming issue.
 	 */
 	if (!app)
-		bail("mapping tool not present");
+		bailx("mapping tool not present");
 
 	child = fork();
 	if (child < 0)
@@ -294,48 +265,53 @@ static int try_mapping_tool(const char *app, int pid, char *map, size_t map_len)
 
 static void update_uidmap(const char *path, int pid, char *map, size_t map_len)
 {
-	if (map == NULL || map_len <= 0)
+	if (map == NULL || map_len == 0)
 		return;
 
+	write_log(DEBUG, "update /proc/%d/uid_map to '%s'", pid, map);
 	if (write_file(map, map_len, "/proc/%d/uid_map", pid) < 0) {
 		if (errno != EPERM)
 			bail("failed to update /proc/%d/uid_map", pid);
+		write_log(DEBUG, "update /proc/%d/uid_map got -EPERM (trying %s)", pid, path);
 		if (try_mapping_tool(path, pid, map, map_len))
-			bail("failed to use newuid map on %d", pid);
+			bailx("failed to use newuid map on %d", pid);
 	}
 }
 
 static void update_gidmap(const char *path, int pid, char *map, size_t map_len)
 {
-	if (map == NULL || map_len <= 0)
+	if (map == NULL || map_len == 0)
 		return;
 
+	write_log(DEBUG, "update /proc/%d/gid_map to '%s'", pid, map);
 	if (write_file(map, map_len, "/proc/%d/gid_map", pid) < 0) {
 		if (errno != EPERM)
 			bail("failed to update /proc/%d/gid_map", pid);
+		write_log(DEBUG, "update /proc/%d/gid_map got -EPERM (trying %s)", pid, path);
 		if (try_mapping_tool(path, pid, map, map_len))
-			bail("failed to use newgid map on %d", pid);
+			bailx("failed to use newgid map on %d", pid);
 	}
 }
 
 static void update_oom_score_adj(char *data, size_t len)
 {
-	if (data == NULL || len <= 0)
+	if (data == NULL || len == 0)
 		return;
 
+	write_log(DEBUG, "update /proc/self/oom_score_adj to '%s'", data);
 	if (write_file(data, len, "/proc/self/oom_score_adj") < 0)
 		bail("failed to update /proc/self/oom_score_adj");
 }
 
 /* A dummy function that just jumps to the given jumpval. */
-static int child_func(void *arg) __attribute__ ((noinline));
+static int child_func(void *arg) __attribute__((noinline));
 static int child_func(void *arg)
 {
 	struct clone_t *ca = (struct clone_t *)arg;
 	longjmp(*ca->env, ca->jmpval);
 }
 
-static int clone_parent(jmp_buf *env, int jmpval) __attribute__ ((noinline));
+static int clone_parent(jmp_buf *env, int jmpval) __attribute__((noinline));
 static int clone_parent(jmp_buf *env, int jmpval)
 {
 	struct clone_t ca = {
@@ -344,66 +320,6 @@ static int clone_parent(jmp_buf *env, int jmpval)
 	};
 
 	return clone(child_func, ca.stack_ptr, CLONE_PARENT | SIGCHLD, &ca);
-}
-
-/*
- * Gets the init pipe fd from the environment, which is used to read the
- * bootstrap data and tell the parent what the new pid is after we finish
- * setting up the environment.
- */
-static int initpipe(void)
-{
-	int pipenum;
-	char *initpipe, *endptr;
-
-	initpipe = getenv("_LIBCONTAINER_INITPIPE");
-	if (initpipe == NULL || *initpipe == '\0')
-		return -1;
-
-	pipenum = strtol(initpipe, &endptr, 10);
-	if (*endptr != '\0')
-		bail("unable to parse _LIBCONTAINER_INITPIPE");
-
-	return pipenum;
-}
-
-static void setup_logpipe(void)
-{
-	char *logpipe, *endptr;
-
-	logpipe = getenv("_LIBCONTAINER_LOGPIPE");
-	if (logpipe == NULL || *logpipe == '\0') {
-		return;
-	}
-
-	logfd = strtol(logpipe, &endptr, 10);
-	if (logpipe == endptr || *endptr != '\0') {
-		fprintf(stderr, "unable to parse _LIBCONTAINER_LOGPIPE, value: %s\n", logpipe);
-		/* It is too early to use bail */
-		exit(1);
-	}
-}
-
-/* Returns the clone(2) flag for a namespace, given the name of a namespace. */
-static int nsflag(char *name)
-{
-	if (!strcmp(name, "cgroup"))
-		return CLONE_NEWCGROUP;
-	else if (!strcmp(name, "ipc"))
-		return CLONE_NEWIPC;
-	else if (!strcmp(name, "mnt"))
-		return CLONE_NEWNS;
-	else if (!strcmp(name, "net"))
-		return CLONE_NEWNET;
-	else if (!strcmp(name, "pid"))
-		return CLONE_NEWPID;
-	else if (!strcmp(name, "user"))
-		return CLONE_NEWUSER;
-	else if (!strcmp(name, "uts"))
-		return CLONE_NEWUTS;
-
-	/* If we don't recognise a name, fallback to 0. */
-	return 0;
 }
 
 static uint32_t readint32(char *buf)
@@ -416,22 +332,59 @@ static uint8_t readint8(char *buf)
 	return *(uint8_t *) buf;
 }
 
+static inline void sane_kill(pid_t pid, int signum)
+{
+	if (pid <= 0)
+		return;
+
+	int saved_errno = errno;
+	kill(pid, signum);
+	errno = saved_errno;
+}
+
+__attribute__((noreturn))
+static void iobail(int got, int want, const char *errmsg, int pid1, int pid2)
+{
+	sane_kill(pid1, SIGKILL);
+	sane_kill(pid2, SIGKILL);
+	if (got < 0)
+		bail("%s", errmsg);
+	/* Short read or write. */
+	bailx("%s (got %d of %d bytes)", errmsg, got, want);
+}
+
+static void xread(int fd, void *buf, size_t nbytes, const char *errmsg, int pid1, int pid2)
+{
+	ssize_t len;
+
+	len = read(fd, buf, nbytes);
+	if (len != nbytes)
+		iobail(len, nbytes, errmsg, pid1, pid2);
+}
+
+static void xwrite(int fd, void *buf, size_t nbytes, const char *errmsg, int pid1, int pid2)
+{
+	ssize_t len;
+
+	len = write(fd, buf, nbytes);
+	if (len != nbytes)
+		iobail(len, nbytes, errmsg, pid1, pid2);
+}
+
 static void nl_parse(int fd, struct nlconfig_t *config)
 {
-	size_t len, size;
+	size_t size;
 	struct nlmsghdr hdr;
 	char *data, *current;
 
 	/* Retrieve the netlink header. */
-	len = read(fd, &hdr, NLMSG_HDRLEN);
-	if (len != NLMSG_HDRLEN)
-		bail("invalid netlink header length %zu", len);
+	xread(fd, &hdr, NLMSG_HDRLEN, "failed to read netlink header", -1, -1);
 
 	if (hdr.nlmsg_type == NLMSG_ERROR)
-		bail("failed to read netlink message");
+		bailx("failed to read netlink message");
 
 	if (hdr.nlmsg_type != INIT_MSG)
-		bail("unexpected msg type %d", hdr.nlmsg_type);
+		bailx("unexpected msg type %d", hdr.nlmsg_type);
 
 	/* Retrieve data. */
 	size = NLMSG_PAYLOAD(&hdr, 0);
@@ -439,9 +392,7 @@ static void nl_parse(int fd, struct nlconfig_t *config)
 	if (!data)
 		bail("failed to allocate %zu bytes of memory for nl_payload", size);
 
-	len = read(fd, data, size);
-	if (len != size)
-		bail("failed to read netlink payload, %zu != %zu", len, size);
+	xread(fd, data, size, "failed to read netlink payload", -1, -1);
 
 	/* Parse the netlink payload. */
 	config->data = data;
@@ -487,6 +438,10 @@ static void nl_parse(int fd, struct nlconfig_t *config)
 		case SETGROUP_ATTR:
 			config->is_setgroup = readint8(current);
 			break;
+		case TIMENSOFFSET_ATTR:
+			config->timensoffset = current;
+			config->timensoffset_len = payload_len;
+			break;
 		default:
 			bail("unknown netlink message type %d", nlattr->nla_type);
 		}
@@ -500,41 +455,72 @@ void nl_free(struct nlconfig_t *config)
 	free(config->data);
 }
 
-void join_namespaces(char *nslist)
+struct namespace_t {
+	int fd;
+	char type[PATH_MAX];
+	char path[PATH_MAX];
+};
+
+typedef int nsset_t;
+
+static struct nstype_t {
+	int type;
+	char *name;
+} all_ns_types[] = {
+	{ CLONE_NEWCGROUP, "cgroup" },
+	{ CLONE_NEWIPC, "ipc" },
+	{ CLONE_NEWNS, "mnt" },
+	{ CLONE_NEWNET, "net" },
+	{ CLONE_NEWPID, "pid" },
+	{ CLONE_NEWTIME, "time" },
+	{ CLONE_NEWUSER, "user" },
+	{ CLONE_NEWUTS, "uts" },
+	{ },			/* null terminator */
+};
+
+/* Returns the clone(2) flag for a namespace, given the name of a namespace. */
+static int nstype(char *name)
 {
-	int num = 0, i;
-	char *saveptr = NULL;
-	char *namespace = strtok_r(nslist, ",", &saveptr);
-	struct namespace_t {
-		int fd;
-		int ns;
-		char type[PATH_MAX];
-		char path[PATH_MAX];
-	} *namespaces = NULL;
-
-	if (!namespace || !strlen(namespace) || !strlen(nslist))
-		bail("ns paths are empty");
-
+	for (struct nstype_t * ns = all_ns_types; ns->name != NULL; ns++)
+		if (!strcmp(name, ns->name))
+			return ns->type;
 	/*
-	 * We have to open the file descriptors first, since after
-	 * we join the mnt namespace we might no longer be able to
-	 * access the paths.
+	 * setns(2) lets us join namespaces without knowing the type, but
+	 * namespaces usually require special handling of some kind (so joining
+	 * a namespace without knowing its type or joining a new namespace type
+	 * without corresponding handling could result in broken behaviour) and
+	 * the rest of runc doesn't allow unknown namespace types anyway.
 	 */
+	bailx("unknown namespace type %s", name);
+}
+
+static nsset_t __open_namespaces(char *nsspec, struct namespace_t **ns_list, size_t *ns_len)
+{
+	int len = 0;
+	nsset_t ns_to_join = 0;
+	char *namespace, *saveptr = NULL;
+	struct namespace_t *namespaces = NULL;
+
+	namespace = strtok_r(nsspec, ",", &saveptr);
+
+	if (!namespace || !strlen(namespace) || !strlen(nsspec))
+		bailx("ns paths are empty");
+
 	do {
 		int fd;
 		char *path;
 		struct namespace_t *ns;
 
 		/* Resize the namespace array. */
-		namespaces = realloc(namespaces, ++num * sizeof(struct namespace_t));
+		namespaces = realloc(namespaces, ++len * sizeof(struct namespace_t));
 		if (!namespaces)
 			bail("failed to reallocate namespace array");
-		ns = &namespaces[num - 1];
+		ns = &namespaces[len - 1];
 
 		/* Split 'ns:path'. */
 		path = strstr(namespace, ":");
 		if (!path)
-			bail("failed to parse %s", namespace);
+			bailx("failed to parse %s", namespace);
 		*path++ = '\0';
 
 		fd = open(path, O_RDONLY);
@@ -542,32 +528,199 @@ void join_namespaces(char *nslist)
 			bail("failed to open %s", path);
 
 		ns->fd = fd;
-		ns->ns = nsflag(namespace);
+		strncpy(ns->type, namespace, PATH_MAX - 1);
 		strncpy(ns->path, path, PATH_MAX - 1);
 		ns->path[PATH_MAX - 1] = '\0';
+
+		ns_to_join |= nstype(ns->type);
 	} while ((namespace = strtok_r(NULL, ",", &saveptr)) != NULL);
 
-	/*
-	 * The ordering in which we join namespaces is important. We should
-	 * always join the user namespace *first*. This is all guaranteed
-	 * from the container_linux.go side of this, so we're just going to
-	 * follow the order given to us.
-	 */
-
-	for (i = 0; i < num; i++) {
-		struct namespace_t ns = namespaces[i];
-
-		if (setns(ns.fd, ns.ns) < 0)
-			bail("failed to setns to %s", ns.path);
-
-		close(ns.fd);
-	}
-
-	free(namespaces);
+	*ns_list = namespaces;
+	*ns_len = len;
+	return ns_to_join;
 }
 
-/* Defined in cloned_binary.c. */
-extern int ensure_cloned_binary(void);
+/*
+ * Try to join all namespaces that are in the "allow" nsset, and return the
+ * set we were able to successfully join. If a permission error is returned
+ * from nsset(2), the namespace is skipped (non-permission errors are fatal).
+ */
+static nsset_t __join_namespaces(nsset_t allow, struct namespace_t *ns_list, size_t ns_len)
+{
+	nsset_t joined = 0;
+
+	for (size_t i = 0; i < ns_len; i++) {
+		struct namespace_t *ns = &ns_list[i];
+		int type = nstype(ns->type);
+		int err, saved_errno;
+
+		if (!(type & allow))
+			continue;
+
+		err = setns(ns->fd, type);
+		saved_errno = errno;
+		write_log(DEBUG, "setns(%#x) into %s namespace (with path %s): %s",
+			  type, ns->type, ns->path, strerror(errno));
+		if (err < 0) {
+			/* Skip permission errors. */
+			if (saved_errno == EPERM)
+				continue;
+			bailx("failed to setns into %s namespace: %s", ns->type, strerror(saved_errno));
+		}
+		joined |= type;
+
+		/*
+		 * If we change user namespaces, make sure we switch to root in the
+		 * namespace (this matches the logic for unshare(CLONE_NEWUSER)), lots
+		 * of things can break if we aren't the right user. See
+		 * <https://github.com/opencontainers/runc/issues/4466> for one example.
+		 */
+		if (type == CLONE_NEWUSER) {
+			if (setresuid(0, 0, 0) < 0)
+				bail("failed to become root in user namespace");
+		}
+
+		close(ns->fd);
+		ns->fd = -1;
+	}
+	return joined;
+}
+
+static char *strappend(char *dst, char *src)
+{
+	if (!dst)
+		return strdup(src);
+
+	size_t len = strlen(dst) + strlen(src) + 1;
+	dst = realloc(dst, len);
+	strncat(dst, src, len);
+	return dst;
+}
+
+static char *nsset_to_str(nsset_t nsset)
+{
+	char *str = NULL;
+	for (struct nstype_t * ns = all_ns_types; ns->name != NULL; ns++) {
+		if (ns->type & nsset) {
+			if (str)
+				str = strappend(str, ", ");
+			str = strappend(str, ns->name);
+		}
+	}
+	return str ? : strdup("");
+}
+
+static void __close_namespaces(nsset_t to_join, nsset_t joined, struct namespace_t *ns_list, size_t ns_len)
+{
+	/* We expect to have joined every namespace. */
+	nsset_t failed_to_join = to_join & ~joined;
+
+	/* Double-check that we used up (and thus joined) all of the nsfds. */
+	for (size_t i = 0; i < ns_len; i++) {
+		struct namespace_t *ns = &ns_list[i];
+		int type = nstype(ns->type);
+
+		if (ns->fd < 0)
+			continue;
+
+		failed_to_join |= type;
+		write_log(FATAL, "failed to setns(%#x) into %s namespace (with path %s): %s",
+			  type, ns->type, ns->path, strerror(EPERM));
+		close(ns->fd);
+		ns->fd = -1;
+	}
+
+	/* Make sure we joined the namespaces we planned to. */
+	if (failed_to_join)
+		bailx("failed to join {%s} namespaces: %s", nsset_to_str(failed_to_join), strerror(EPERM));
+
+	free(ns_list);
+}
+
+void join_namespaces(char *nsspec)
+{
+	nsset_t to_join = 0, joined = 0;
+	struct namespace_t *ns_list;
+	size_t ns_len;
+
+	/*
+	 * We have to open the file descriptors first, since after we join the
+	 * mnt or user namespaces we might no longer be able to access the
+	 * paths.
+	 */
+	to_join = __open_namespaces(nsspec, &ns_list, &ns_len);
+
+	/*
+	 * We first try to join all non-userns namespaces to join any namespaces
+	 * that we might not be able to join once we switch credentials to the
+	 * container's userns. We then join the user namespace, and then try to
+	 * join any remaining namespaces (this last step is needed for rootless
+	 * containers -- we don't get setns(2) permissions until we join the userns
+	 * and get CAP_SYS_ADMIN).
+	 *
+	 * Splitting the joins this way is necessary for containers that are
+	 * configured to join some externally-created namespace but are also
+	 * configured to join an unrelated user namespace.
+	 *
+	 * This is similar to what nsenter(1) seems to do in practice.
+	 */
+	joined |= __join_namespaces(to_join & ~(joined | CLONE_NEWUSER), ns_list, ns_len);
+	joined |= __join_namespaces(CLONE_NEWUSER, ns_list, ns_len);
+	joined |= __join_namespaces(to_join & ~(joined | CLONE_NEWUSER), ns_list, ns_len);
+
+	/* Verify that we joined all of the namespaces. */
+	__close_namespaces(to_join, joined, ns_list, ns_len);
+}
+
+void try_unshare(int flags, const char *msg)
+{
+	write_log(DEBUG, "unshare %s", msg);
+	/*
+	 * Kernels prior to v4.3 may return EINVAL on unshare when another process
+	 * reads runc's /proc/$PID/status or /proc/$PID/maps. To work around this,
+	 * retry on EINVAL a few times.
+	 */
+	int retries = 5;
+	for (; retries > 0; retries--) {
+		if (unshare(flags) == 0) {
+			return;
+		}
+		if (errno != EINVAL)
+			break;
+	}
+	bail("failed to unshare %s", msg);
+}
+
+static void update_timens_offsets(pid_t pid, char *map, size_t map_len)
+{
+	if (map == NULL || map_len == 0)
+		return;
+	write_log(DEBUG, "update /proc/%d/timens_offsets to '%s'", pid, map);
+	if (write_file(map, map_len, "/proc/%d/timens_offsets", pid) < 0)
+		bail("failed to update /proc/%d/timens_offsets", pid);
+}
+
+static void log_cpu_affinity()
+{
+	cpu_set_t cpus = { };
+	size_t i, mask = 0;
+
+	if (!log_enabled_for(DEBUG))
+		return;
+
+	if (sched_getaffinity(0, sizeof(cpus), &cpus) < 0) {
+		write_log(WARNING, "sched_getaffinity: %m");
+		return;
+	}
+
+	/* Do not print the complete mask, we only need a few first CPUs. */
+	for (i = 0; i < sizeof(mask) * 8; i++) {
+		if (CPU_ISSET(i, &cpus))
+			mask |= 1 << i;
+	}
+
+	write_log(DEBUG, "affinity: 0x%zx", mask);
+}
 
 void nsexec(void)
 {
@@ -583,22 +736,26 @@ void nsexec(void)
 	setup_logpipe();
 
 	/*
-	 * If we don't have an init pipe, just return to the go routine.
-	 * We'll only get an init pipe for start or exec.
+	 * Get the init pipe fd from the environment. The init pipe is used to
+	 * read the bootstrap data and tell the parent what the new pids are
+	 * after the setup is done.
 	 */
-	pipenum = initpipe();
-	if (pipenum == -1)
+	pipenum = getenv_int("_LIBCONTAINER_INITPIPE");
+	if (pipenum < 0) {
+		/* We are not a runc init. Just return to go runtime. */
 		return;
+	}
 
-	/*
-	 * We need to re-exec if we are not in a cloned binary. This is necessary
-	 * to ensure that containers won't be able to access the host binary
-	 * through /proc/self/exe. See CVE-2019-5736.
+	write_log(DEBUG, "=> nsexec container setup");
+
+	/* Log initial CPU affinity, this is solely for the tests in
+	 * ../../tests/integration/cpu_affinity.bats.
+	 *
+	 * Logging this from Go code might be too late as some kernels
+	 * change the process' CPU affinity to that of container's cpuset
+	 * as soon as the process is moved into container's cgroup.
 	 */
-	if (ensure_cloned_binary() < 0)
-		bail("could not ensure we are a cloned binary");
-
-	write_log(DEBUG, "nsexec started");
+	log_cpu_affinity();
 
 	/* Parse all of the netlink configuration. */
 	nl_parse(pipenum, &config);
@@ -622,6 +779,7 @@ void nsexec(void)
 	 * containers), which is the recommendation from the kernel folks.
 	 */
 	if (config.namespaces) {
+		write_log(DEBUG, "set process as non-dumpable");
 		if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) < 0)
 			bail("failed to set process as non-dumpable");
 	}
@@ -689,42 +847,49 @@ void nsexec(void)
 	switch (setjmp(env)) {
 		/*
 		 * Stage 0: We're in the parent. Our job is just to create a new child
-		 *          (stage 1: JUMP_CHILD) process and write its uid_map and
+		 *          (stage 1: STAGE_CHILD) process and write its uid_map and
 		 *          gid_map. That process will go on to create a new process, then
 		 *          it will send us its PID which we will send to the bootstrap
 		 *          process.
 		 */
-	case JUMP_PARENT:{
+	case STAGE_PARENT:{
 			int len;
-			pid_t child, first_child = -1;
-			bool ready = false;
+			pid_t stage1_pid = -1, stage2_pid = -1;
+			bool stage1_complete, stage2_complete;
 
 			/* For debugging. */
+			current_stage = STAGE_PARENT;
 			prctl(PR_SET_NAME, (unsigned long)"runc:[0:PARENT]", 0, 0, 0);
+			write_log(DEBUG, "~> nsexec stage-0");
 
 			/* Start the process of getting a container. */
-			child = clone_parent(&env, JUMP_CHILD);
-			if (child < 0)
-				bail("unable to fork: child_func");
+			write_log(DEBUG, "spawn stage-1");
+			stage1_pid = clone_parent(&env, STAGE_CHILD);
+			if (stage1_pid < 0)
+				bail("unable to spawn stage-1");
+
+			syncfd = sync_child_pipe[1];
+			if (close(sync_child_pipe[0]) < 0) {
+				sane_kill(stage1_pid, SIGKILL);
+				bail("failed to close sync_child_pipe[0] fd");
+			}
 
 			/*
-			 * State machine for synchronisation with the children.
-			 *
-			 * Father only return when both child and grandchild are
-			 * ready, so we can receive all possible error codes
-			 * generated by children.
+			 * State machine for synchronisation with the children. We only
+			 * return once both the child and grandchild are ready.
 			 */
-			while (!ready) {
+			write_log(DEBUG, "-> stage-1 synchronisation loop");
+			stage1_complete = false;
+			while (!stage1_complete) {
 				enum sync_t s;
 
-				syncfd = sync_child_pipe[1];
-				close(sync_child_pipe[0]);
-
-				if (read(syncfd, &s, sizeof(s)) != sizeof(s))
-					bail("failed to sync with child: next state");
+				xread(syncfd, &s, sizeof(s),
+				      "failed to sync with stage-1: next state", stage1_pid, stage2_pid);
 
 				switch (s) {
 				case SYNC_USERMAP_PLS:
+					write_log(DEBUG, "stage-1 requested userns mappings");
+
 					/*
 					 * Enable setgroups(2) if we've been asked to. But we also
 					 * have to explicitly disable setgroups(2) if we're
@@ -735,111 +900,133 @@ void nsexec(void)
 					 * For rootless multi-entry mapping, config.is_setgroup shall be true and
 					 * newuidmap/newgidmap shall be used.
 					 */
-
 					if (config.is_rootless_euid && !config.is_setgroup)
-						update_setgroups(child, SETGROUPS_DENY);
+						update_setgroups(stage1_pid, SETGROUPS_DENY);
 
 					/* Set up mappings. */
-					update_uidmap(config.uidmappath, child, config.uidmap, config.uidmap_len);
-					update_gidmap(config.gidmappath, child, config.gidmap, config.gidmap_len);
+					update_uidmap(config.uidmappath, stage1_pid, config.uidmap, config.uidmap_len);
+					update_gidmap(config.gidmappath, stage1_pid, config.gidmap, config.gidmap_len);
 
 					s = SYNC_USERMAP_ACK;
-					if (write(syncfd, &s, sizeof(s)) != sizeof(s)) {
-						kill(child, SIGKILL);
-						bail("failed to sync with child: write(SYNC_USERMAP_ACK)");
-					}
+					xwrite(syncfd, &s, sizeof(s),
+					       "failed to sync with stage-1: write(SYNC_USERMAP_ACK)", stage1_pid, -1);
 					break;
-				case SYNC_RECVPID_PLS:{
-						first_child = child;
+				case SYNC_RECVPID_PLS:
+					write_log(DEBUG, "stage-1 requested pid to be forwarded");
 
-						/* Get the init_func pid. */
-						if (read(syncfd, &child, sizeof(child)) != sizeof(child)) {
-							kill(first_child, SIGKILL);
-							bail("failed to sync with child: read(childpid)");
-						}
+					/* Get the stage-2 pid. */
+					xread(syncfd, &stage2_pid, sizeof(stage2_pid),
+					      "failed to sync with stage-1: read(stage2_pid)", stage1_pid, -1);
 
-						/* Send ACK. */
-						s = SYNC_RECVPID_ACK;
-						if (write(syncfd, &s, sizeof(s)) != sizeof(s)) {
-							kill(first_child, SIGKILL);
-							kill(child, SIGKILL);
-							bail("failed to sync with child: write(SYNC_RECVPID_ACK)");
-						}
+					/* Send ACK. */
+					s = SYNC_RECVPID_ACK;
+					xwrite(syncfd, &s, sizeof(s),
+					       "failed to sync with stage-1: write(SYNC_RECVPID_ACK)",
+					       stage1_pid, stage2_pid);
 
-						/* Send the init_func pid back to our parent.
-						 *
-						 * Send the init_func pid and the pid of the first child back to our parent.
-						 * We need to send both back because we can't reap the first child we created (CLONE_PARENT).
-						 * It becomes the responsibility of our parent to reap the first child.
-						 */
-						len = dprintf(pipenum, "{\"pid\": %d, \"pid_first\": %d}\n", child, first_child);
-						if (len < 0) {
-							kill(child, SIGKILL);
-							bail("unable to generate JSON for child pid");
-						}
-					}
+					/*
+					 * Send both the stage-1 and stage-2 pids back to runc.
+					 * runc needs the stage-2 to continue process management,
+					 * but because stage-1 was spawned with CLONE_PARENT we
+					 * cannot reap it within stage-0 and thus we need to ask
+					 * runc to reap the zombie for us.
+					 */
+					write_log(DEBUG, "forward stage-1 (%d) and stage-2 (%d) pids to runc",
+						  stage1_pid, stage2_pid);
+					len =
+					    dprintf(pipenum, "{\"stage1_pid\":%d,\"stage2_pid\":%d}\n", stage1_pid,
+						    stage2_pid);
+					if (len < 0)
+						iobail(len, len,
+						       "failed to sync with runc: write(pid-JSON)",
+						       stage1_pid, stage2_pid);
 					break;
-				case SYNC_CHILD_READY:
-					ready = true;
+				case SYNC_TIMEOFFSETS_PLS:
+					write_log(DEBUG, "stage-1 requested timens offsets to be configured");
+					update_timens_offsets(stage1_pid, config.timensoffset, config.timensoffset_len);
+					s = SYNC_TIMEOFFSETS_ACK;
+					xwrite(syncfd, &s, sizeof(s),
+					       "failed to sync with child: write(SYNC_TIMEOFFSETS_ACK)",
+					       stage1_pid, -1);
+					break;
+				case SYNC_CHILD_FINISH:
+					write_log(DEBUG, "stage-1 complete");
+					stage1_complete = true;
+					stage1_pid = -1;
 					break;
 				default:
-					bail("unexpected sync value: %u", s);
+					sane_kill(stage1_pid, SIGKILL);
+					sane_kill(stage2_pid, SIGKILL);
+					bailx("unexpected sync value: %u", s);
 				}
 			}
+			write_log(DEBUG, "<- stage-1 synchronisation loop");
 
 			/* Now sync with grandchild. */
+			syncfd = sync_grandchild_pipe[1];
+			if (close(sync_grandchild_pipe[0]) < 0) {
+				sane_kill(stage2_pid, SIGKILL);
+				bail("failed to close sync_grandchild_pipe[0] fd");
+			}
 
-			ready = false;
-			while (!ready) {
+			write_log(DEBUG, "-> stage-2 synchronisation loop");
+			stage2_complete = false;
+			while (!stage2_complete) {
 				enum sync_t s;
 
-				syncfd = sync_grandchild_pipe[1];
-				close(sync_grandchild_pipe[0]);
-
+				write_log(DEBUG, "signalling stage-2 to run");
 				s = SYNC_GRANDCHILD;
-				if (write(syncfd, &s, sizeof(s)) != sizeof(s)) {
-					kill(child, SIGKILL);
-					bail("failed to sync with child: write(SYNC_GRANDCHILD)");
-				}
+				xwrite(syncfd, &s, sizeof(s),
+				       "failed to sync with child: write(SYNC_GRANDCHILD)", -1, stage2_pid);
 
-				if (read(syncfd, &s, sizeof(s)) != sizeof(s))
-					bail("failed to sync with child: next state");
+				xread(syncfd, &s, sizeof(s), "failed to sync with child: next state", -1, stage2_pid);
 
 				switch (s) {
-				case SYNC_CHILD_READY:
-					ready = true;
+				case SYNC_CHILD_FINISH:
+					write_log(DEBUG, "stage-2 complete");
+					stage2_complete = true;
+					stage2_pid = -1;
 					break;
 				default:
-					bail("unexpected sync value: %u", s);
+					sane_kill(stage2_pid, SIGKILL);
+					bailx("unexpected sync value: %u", s);
 				}
 			}
+			write_log(DEBUG, "<- stage-2 synchronisation loop");
+			write_log(DEBUG, "<~ nsexec stage-0");
 			exit(0);
 		}
+		break;
 
 		/*
 		 * Stage 1: We're in the first child process. Our job is to join any
-		 *          provided namespaces in the netlink payload and unshare all
-		 *          of the requested namespaces. If we've been asked to
-		 *          CLONE_NEWUSER, we will ask our parent (stage 0) to set up
-		 *          our user mappings for us. Then, we create a new child
-		 *          (stage 2: JUMP_INIT) for PID namespace. We then send the
-		 *          child's PID to our parent (stage 0).
+		 *          provided namespaces in the netlink payload and unshare all of
+		 *          the requested namespaces. If we've been asked to CLONE_NEWUSER,
+		 *          we will ask our parent (stage 0) to set up our user mappings
+		 *          for us. Then, we create a new child (stage 2: STAGE_INIT) for
+		 *          PID namespace. We then send the child's PID to our parent
+		 *          (stage 0).
 		 */
-	case JUMP_CHILD:{
-			pid_t child;
+	case STAGE_CHILD:{
+			pid_t stage2_pid = -1;
 			enum sync_t s;
+
+			/* For debugging. */
+			current_stage = STAGE_CHILD;
 
 			/* We're in a child and thus need to tell the parent if we die. */
 			syncfd = sync_child_pipe[0];
-			close(sync_child_pipe[1]);
+			if (close(sync_child_pipe[1]) < 0)
+				bail("failed to close sync_child_pipe[1] fd");
 
 			/* For debugging. */
 			prctl(PR_SET_NAME, (unsigned long)"runc:[1:CHILD]", 0, 0, 0);
+			write_log(DEBUG, "~> nsexec stage-1");
 
 			/*
 			 * We need to setns first. We cannot do this earlier (in stage 0)
 			 * because of the fact that we forked to get here (the PID of
-			 * [stage 2: JUMP_INIT]) would be meaningless). We could send it
+			 * [stage 2: STAGE_INIT]) would be meaningless). We could send it
 			 * using cmsg(3) but that's just annoying.
 			 */
 			if (config.namespaces)
@@ -865,40 +1052,48 @@ void nsexec(void)
 			 * problem.
 			 */
 			if (config.cloneflags & CLONE_NEWUSER) {
-				if (unshare(CLONE_NEWUSER) < 0)
-					bail("failed to unshare user namespace");
+				try_unshare(CLONE_NEWUSER, "user namespace");
 				config.cloneflags &= ~CLONE_NEWUSER;
 
 				/*
-				 * We don't have the privileges to do any mapping here (see the
-				 * clone_parent rant). So signal our parent to hook us up.
+				 * We need to set ourselves as dumpable temporarily so that the
+				 * parent process can write to our procfs files.
 				 */
-
-				/* Switching is only necessary if we joined namespaces. */
 				if (config.namespaces) {
+					write_log(DEBUG, "temporarily set process as dumpable");
 					if (prctl(PR_SET_DUMPABLE, 1, 0, 0, 0) < 0)
-						bail("failed to set process as dumpable");
+						bail("failed to temporarily set process as dumpable");
 				}
+
+				/*
+				 * We don't have the privileges to do any mapping here (see the
+				 * clone_parent rant). So signal stage-0 to do the mapping for
+				 * us.
+				 */
+				write_log(DEBUG, "request stage-0 to map user namespace");
 				s = SYNC_USERMAP_PLS;
-				if (write(syncfd, &s, sizeof(s)) != sizeof(s))
-					bail("failed to sync with parent: write(SYNC_USERMAP_PLS)");
+				xwrite(syncfd, &s, sizeof(s),
+				       "failed to sync with parent: write(SYNC_USERMAP_PLS)", -1, -1);
 
 				/* ... wait for mapping ... */
-
-				if (read(syncfd, &s, sizeof(s)) != sizeof(s))
-					bail("failed to sync with parent: read(SYNC_USERMAP_ACK)");
+				write_log(DEBUG, "waiting stage-0 to complete the mapping of user namespace");
+				xread(syncfd, &s, sizeof(s),
+				      "failed to sync with parent: read(SYNC_USERMAP_ACK)", -1, -1);
 				if (s != SYNC_USERMAP_ACK)
-					bail("failed to sync with parent: SYNC_USERMAP_ACK: got %u", s);
-				/* Switching is only necessary if we joined namespaces. */
+					bailx("failed to sync with parent: SYNC_USERMAP_ACK: got %u", s);
+
+				/* Revert temporary re-dumpable setting. */
 				if (config.namespaces) {
+					write_log(DEBUG, "re-set process as non-dumpable");
 					if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) < 0)
-						bail("failed to set process as dumpable");
+						bail("failed to re-set process as non-dumpable");
 				}
 
 				/* Become root in the namespace proper. */
 				if (setresuid(0, 0, 0) < 0)
 					bail("failed to become root in user namespace");
 			}
+
 			/*
 			 * Unshare all of the namespaces. Now, it should be noted that this
 			 * ordering might break in the future (especially with rootless
@@ -909,8 +1104,20 @@ void nsexec(void)
 			 * some old kernel versions where clone(CLONE_PARENT | CLONE_NEWPID)
 			 * was broken, so we'll just do it the long way anyway.
 			 */
-			if (unshare(config.cloneflags & ~CLONE_NEWCGROUP) < 0)
-				bail("failed to unshare namespaces");
+			try_unshare(config.cloneflags, "remaining namespaces");
+
+			if (config.timensoffset) {
+				write_log(DEBUG, "request stage-0 to write timens offsets");
+
+				s = SYNC_TIMEOFFSETS_PLS;
+				xwrite(syncfd, &s, sizeof(s),
+				       "failed to sync with parent: write(SYNC_TIMEOFFSETS_PLS)", -1, -1);
+
+				xread(syncfd, &s, sizeof(s),
+				      "failed to sync with parent: read(SYNC_TIMEOFFSETS_ACK)", -1, -1);
+				if (s != SYNC_TIMEOFFSETS_ACK)
+					bailx("failed to sync with parent: SYNC_TIMEOFFSETS_ACK: got %u", s);
+			}
 
 			/*
 			 * TODO: What about non-namespace clone flags that we're dropping here?
@@ -921,41 +1128,37 @@ void nsexec(void)
 			 * which would break many applications and libraries, so we must fork
 			 * to actually enter the new PID namespace.
 			 */
-			child = clone_parent(&env, JUMP_INIT);
-			if (child < 0)
-				bail("unable to fork: init_func");
+			write_log(DEBUG, "spawn stage-2");
+			stage2_pid = clone_parent(&env, STAGE_INIT);
+			if (stage2_pid < 0)
+				bail("unable to spawn stage-2");
 
 			/* Send the child to our parent, which knows what it's doing. */
+			write_log(DEBUG, "request stage-0 to forward stage-2 pid (%d)", stage2_pid);
 			s = SYNC_RECVPID_PLS;
-			if (write(syncfd, &s, sizeof(s)) != sizeof(s)) {
-				kill(child, SIGKILL);
-				bail("failed to sync with parent: write(SYNC_RECVPID_PLS)");
-			}
-			if (write(syncfd, &child, sizeof(child)) != sizeof(child)) {
-				kill(child, SIGKILL);
-				bail("failed to sync with parent: write(childpid)");
-			}
+			xwrite(syncfd, &s, sizeof(s),
+			       "failed to sync with parent: write(SYNC_RECVPID_PLS)", -1, stage2_pid);
+			xwrite(syncfd, &stage2_pid, sizeof(stage2_pid),
+			       "failed to sync with parent: write(stage2_pid)", -1, stage2_pid);
 
 			/* ... wait for parent to get the pid ... */
-
-			if (read(syncfd, &s, sizeof(s)) != sizeof(s)) {
-				kill(child, SIGKILL);
-				bail("failed to sync with parent: read(SYNC_RECVPID_ACK)");
-			}
+			xread(syncfd, &s, sizeof(s),
+			      "failed to sync with parent: read(SYNC_RECVPID_ACK)", -1, stage2_pid);
 			if (s != SYNC_RECVPID_ACK) {
-				kill(child, SIGKILL);
-				bail("failed to sync with parent: SYNC_RECVPID_ACK: got %u", s);
+				sane_kill(stage2_pid, SIGKILL);
+				bailx("failed to sync with parent: SYNC_RECVPID_ACK: got %u", s);
 			}
 
-			s = SYNC_CHILD_READY;
-			if (write(syncfd, &s, sizeof(s)) != sizeof(s)) {
-				kill(child, SIGKILL);
-				bail("failed to sync with parent: write(SYNC_CHILD_READY)");
-			}
+			write_log(DEBUG, "signal completion to stage-0");
+			s = SYNC_CHILD_FINISH;
+			xwrite(syncfd, &s, sizeof(s),
+			       "failed to sync with parent: write(SYNC_CHILD_FINISH)", -1, stage2_pid);
 
-			/* Our work is done. [Stage 2: JUMP_INIT] is doing the rest of the work. */
+			/* Our work is done. [Stage 2: STAGE_INIT] is doing the rest of the work. */
+			write_log(DEBUG, "<~ nsexec stage-1");
 			exit(0);
 		}
+		break;
 
 		/*
 		 * Stage 2: We're the final child process, and the only process that will
@@ -963,26 +1166,31 @@ void nsexec(void)
 		 *          final cleanup steps and then return to the Go runtime to allow
 		 *          init_linux.go to run.
 		 */
-	case JUMP_INIT:{
+	case STAGE_INIT:{
 			/*
 			 * We're inside the child now, having jumped from the
 			 * start_child() code after forking in the parent.
 			 */
 			enum sync_t s;
 
+			/* For debugging. */
+			current_stage = STAGE_INIT;
+
 			/* We're in a child and thus need to tell the parent if we die. */
 			syncfd = sync_grandchild_pipe[0];
-			close(sync_grandchild_pipe[1]);
-			close(sync_child_pipe[0]);
-			close(sync_child_pipe[1]);
+			if (close(sync_grandchild_pipe[1]) < 0)
+				bail("failed to close sync_grandchild_pipe[1] fd");
+
+			if (close(sync_child_pipe[0]) < 0)
+				bail("failed to close sync_child_pipe[0] fd");
 
 			/* For debugging. */
 			prctl(PR_SET_NAME, (unsigned long)"runc:[2:INIT]", 0, 0, 0);
+			write_log(DEBUG, "~> nsexec stage-2");
 
-			if (read(syncfd, &s, sizeof(s)) != sizeof(s))
-				bail("failed to sync with parent: read(SYNC_GRANDCHILD)");
+			xread(syncfd, &s, sizeof(s), "failed to sync with parent: read(SYNC_GRANDCHILD)", -1, -1);
 			if (s != SYNC_GRANDCHILD)
-				bail("failed to sync with parent: SYNC_GRANDCHILD: got %u", s);
+				bailx("failed to sync with parent: SYNC_GRANDCHILD: got %u", s);
 
 			if (setsid() < 0)
 				bail("setsid failed");
@@ -998,35 +1206,27 @@ void nsexec(void)
 					bail("setgroups failed");
 			}
 
-			/* ... wait until our topmost parent has finished cgroup setup in p.manager.Apply() ... */
-			if (config.cloneflags & CLONE_NEWCGROUP) {
-				uint8_t value;
-				if (read(pipenum, &value, sizeof(value)) != sizeof(value))
-					bail("read synchronisation value failed");
-				if (value == CREATECGROUPNS) {
-					if (unshare(CLONE_NEWCGROUP) < 0)
-						bail("failed to unshare cgroup namespace");
-				} else
-					bail("received unknown synchronisation value");
-			}
-
-			s = SYNC_CHILD_READY;
-			if (write(syncfd, &s, sizeof(s)) != sizeof(s))
-				bail("failed to sync with patent: write(SYNC_CHILD_READY)");
+			write_log(DEBUG, "signal completion to stage-0");
+			s = SYNC_CHILD_FINISH;
+			xwrite(syncfd, &s, sizeof(s), "failed to sync with parent: write(SYNC_CHILD_FINISH)", -1, -1);
 
 			/* Close sync pipes. */
-			close(sync_grandchild_pipe[0]);
+			if (close(sync_grandchild_pipe[0]) < 0)
+				bail("failed to close sync_grandchild_pipe[0] fd");
 
 			/* Free netlink data. */
 			nl_free(&config);
 
 			/* Finish executing, let the Go runtime take over. */
+			write_log(DEBUG, "<= nsexec container setup");
+			write_log(DEBUG, "booting up go runtime ...");
 			return;
 		}
+		break;
 	default:
-		bail("unexpected jump value");
+		bailx("unexpected jump value");
 	}
 
 	/* Should never be reached. */
-	bail("should never be reached");
+	bailx("should never be reached");
 }

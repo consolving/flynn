@@ -12,7 +12,7 @@ require (
 	github.com/cheggaaa/pb v0.0.0-20150223212723-0464652af750
 	github.com/cupcake/jsonschema v0.0.0-20160618151340-51bf6945446b
 	github.com/dgryski/go-skip32 v0.0.0-20131221203938-6cc5a8b574de
-	github.com/docker/go-units v0.3.0
+	github.com/docker/go-units v0.5.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/flynn/go-check v0.0.0-20150613200214-592122021381
 	github.com/flynn/go-docopt v0.0.0-20140912013429-f6dd2ebbb31e
@@ -48,17 +48,17 @@ require (
 	github.com/minio/minio-go v0.0.0-20170324230031-29b05151452a
 	github.com/mistifyio/go-zfs v0.0.0-20141209150540-dda1f4cd04dc
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/opencontainers/runc v1.0.0-rc8
+	github.com/opencontainers/runc v1.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/sparse-tools v0.0.0-20190307223929-666f9b3bde21
 	github.com/stevvooe/resumable v0.0.0-20150521211217-51ad44105773
 	github.com/tent/canonical-json-go v0.0.0-20130607151641-96e4ba3a7613
-	github.com/vishvananda/netlink v0.0.0-20170502164845-1e045880fbc2
+	github.com/vishvananda/netlink v1.3.1
 	go.mongodb.org/mongo-driver v1.17.9
 	golang.org/x/crypto v0.50.0
 	golang.org/x/net v0.53.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sys v0.43.0
+	golang.org/x/sys v0.46.0
 	google.golang.org/api v0.276.0
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7
 	google.golang.org/grpc v1.80.0
@@ -67,6 +67,18 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v0.0.0-20181223230014-1083505acf35
+)
+
+require (
+	cyphar.com/go-pathrs v0.2.5 // indirect
+	github.com/aperturerobotics/protobuf-go-lite v0.14.0 // indirect
+	github.com/checkpoint-restore/go-criu/v8 v8.3.0 // indirect
+	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/moby/sys/capability v0.4.0 // indirect
+	github.com/moby/sys/mountinfo v0.7.2 // indirect
+	github.com/moby/sys/user v0.4.0 // indirect
+	github.com/moby/sys/userns v0.1.0 // indirect
 )
 
 require (
@@ -83,12 +95,10 @@ require (
 	github.com/armon/go-metrics v0.0.0-20150601112433-b2d95e5291cd // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/checkpoint-restore/go-criu v0.0.0-20181120144056-17b0214f6c48 // indirect
 	github.com/cncf/xds/go v0.0.0-20251210132809-ee656c7534f5 // indirect
-	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
+	github.com/containerd/console v1.0.5 // indirect
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
+	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.36.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -97,7 +107,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-stack/stack v1.7.0 // indirect
-	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -113,20 +122,20 @@ require (
 	github.com/kr/binarydist v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
-	github.com/mrunalp/fileutils v0.0.0-20171103030105-7d4729fb3618 // indirect
+	github.com/mrunalp/fileutils v0.5.1 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/olekukonko/ts v0.0.0-20140412220145-ecf753e7c962 // indirect
-	github.com/opencontainers/runtime-spec v1.0.1 // indirect
-	github.com/opencontainers/selinux v1.2.2 // indirect
+	github.com/opencontainers/cgroups v0.0.6
+	github.com/opencontainers/runtime-spec v1.3.0 // indirect
+	github.com/opencontainers/selinux v1.13.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rnd42/go-jsonpointer v0.0.0-20140520035338-0480215403db // indirect
 	github.com/rs/cors v1.7.0 // indirect
-	github.com/seccomp/libseccomp-golang v0.0.0-20160531183505-32f571b70023 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/seccomp/libseccomp-golang v0.11.1 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190710185942-9d28bd7c0945 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
-	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
-	github.com/vishvananda/netns v0.0.0-20170219233438-54f0e4339ce7 // indirect
+	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
@@ -153,9 +162,7 @@ require (
 	labix.org/v2/mgo v0.0.0-20140701140051-000000000287 // indirect
 )
 
-replace github.com/opencontainers/runc => github.com/flynn/runc v1.0.0-rc1001
-
-replace github.com/godbus/dbus => github.com/godbus/dbus/v5 v5.0.2
+replace github.com/godbus/dbus => github.com/godbus/dbus/v5 v5.2.2
 
 replace github.com/coreos/pkg => github.com/flynn/coreos-pkg v1.0.1
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	host "github.com/flynn/flynn/host/types"
-	"github.com/opencontainers/runc/libcontainer/configs"
+	"github.com/opencontainers/cgroups/devices/config"
 	"golang.org/x/sys/unix"
 )
 
@@ -39,7 +39,7 @@ func jobProfileZFS(job *host.Job) error {
 		{
 			Type:        'b',
 			Major:       zfsVolMajor,
-			Minor:       configs.Wildcard,
+			Minor:       config.Wildcard,
 			Permissions: "rwm",
 		},
 	}...)

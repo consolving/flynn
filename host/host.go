@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,7 +28,6 @@ import (
 	"github.com/flynn/go-docopt"
 	"github.com/inconshreveable/log15"
 	"github.com/opencontainers/runc/libcontainer"
-	_ "github.com/opencontainers/runc/libcontainer/nsenter"
 )
 
 const configFile = "/etc/flynn/host.json"
@@ -69,16 +66,14 @@ options:
 
 func main() {
 	// when starting a container with libcontainer, we first exec the
-	// current binary with libcontainer-init as the first argument,
-	// which triggers the following code to initialise the container
-	// environment (namespaces, network etc.) then exec containerinit
-	if len(os.Args) > 1 && os.Args[1] == "libcontainer-init" {
-		runtime.GOMAXPROCS(1)
-		runtime.LockOSThread()
-		factory, _ := libcontainer.New("")
-		if err := factory.StartInitialization(); err != nil {
-			log.Fatal(err)
-		}
+	// current binary with init as the first argument, which triggers
+	// the following code to initialise the container environment
+	// (namespaces, network etc.) then exec containerinit. The
+	// _LIBCONTAINER_SYNCPIPE environment variable is set by
+	// libcontainer for the child it spawns, so it distinguishes this
+	// re-exec from the user-facing "flynn-host init" command.
+	if len(os.Args) > 1 && os.Args[1] == "init" && os.Getenv("_LIBCONTAINER_SYNCPIPE") != "" {
+		libcontainer.Init()
 	}
 
 	defer shutdown.Exit()
