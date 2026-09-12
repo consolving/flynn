@@ -1,5 +1,11 @@
 package stream
 
+import "errors"
+
+// ErrClosed is the error a resuming stream reports when it is stopped
+// with Close() (as opposed to failing on its own).
+var ErrClosed = errors.New("stream: closed")
+
 /*
 	A Stream allows control over a stream sent to a channel.
 

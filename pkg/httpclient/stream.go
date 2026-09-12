@@ -86,20 +86,34 @@ var connectAttempts = attempt.Strategy{
 }
 
 func ResumingStream(connect func(int64) (*http.Response, error, bool), outputCh interface{}) (stream.Stream, error) {
-	stream := stream.New()
+	st := stream.New()
 	firstErr := make(chan error)
 	go func() {
 		var once sync.Once
 		var lastID int64
-		stopChanValue := reflect.ValueOf(stream.StopCh)
+		stopChanValue := reflect.ValueOf(st.StopCh)
 		outValue := reflect.ValueOf(outputCh)
 		defer outValue.Close()
 		for {
+			// Honor Close() between resumption attempts, so a stopped
+			// stream doesn't keep reconnecting in the background.
+			select {
+			case <-st.StopCh:
+				st.Error = stream.ErrClosed
+				return
+			default:
+			}
 			var res *http.Response
 			// nonRetryableErr will be set if a connection attempt should not
 			// be retried (for example if a 404 is returned).
 			var nonRetryableErr error
 			err := connectAttempts.Run(func() (err error) {
+				select {
+				case <-st.StopCh:
+					nonRetryableErr = stream.ErrClosed
+					return nil
+				default:
+				}
 				var retry bool
 				res, err, retry = connect(lastID)
 				if !retry {
@@ -113,7 +127,7 @@ func ResumingStream(connect func(int64) (*http.Response, error, bool), outputCh 
 			}
 			once.Do(func() { firstErr <- err })
 			if err != nil {
-				stream.Error = err
+				st.Error = err
 				return
 			}
 			chanValue := reflect.MakeChan(outValue.Type(), 0)
@@ -149,5 +163,5 @@ func ResumingStream(connect func(int64) (*http.Response, error, bool), outputCh 
 			}
 		}
 	}()
-	return stream, <-firstErr
+	return st, <-firstErr
 }

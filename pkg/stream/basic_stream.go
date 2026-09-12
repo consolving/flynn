@@ -1,5 +1,7 @@
 package stream
 
+import "sync"
+
 /*
 	Initializer for a Basic Stream.
 
@@ -29,10 +31,13 @@ func New() *Basic {
 type Basic struct {
 	StopCh chan struct{}
 	Error  error
+
+	closeOnce sync.Once
 }
 
+// Close signals the stop channel. It is safe to call more than once.
 func (s *Basic) Close() error {
-	close(s.StopCh)
+	s.closeOnce.Do(func() { close(s.StopCh) })
 	return nil
 }
 
